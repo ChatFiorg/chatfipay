@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Copy, Check } from "lucide-react";
 
 const TOKENS = [
@@ -16,6 +16,24 @@ interface Props {
 const ManualPay = ({ walletAddress, amount }: Props) => {
   const [copied, setCopied] = useState(false);
   const [selectedToken, setSelectedToken] = useState(TOKENS[0]);
+  const [solPrice, setSolPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112")
+      .then(r => r.json())
+      .then(d => {
+        const price = d?.data?.["So11111111111111111111111111111111111111112"]?.price;
+        if (price) setSolPrice(parseFloat(price));
+      })
+      .catch(() => {});
+  }, []);
+
+  const convertedAmount = (): string => {
+    if (!amount) return "";
+    if (selectedToken.symbol === "SOL") return amount.toString();
+    if (!solPrice) return "...";
+    return (amount * solPrice).toFixed(2);
+  };
 
   const copy = async () => {
     await navigator.clipboard.writeText(walletAddress);
@@ -47,7 +65,7 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
       {amount && (
         <div className="w-full bg-[#1A1A1A] rounded-xl p-3 text-center">
           <p className="text-gray-400 text-sm">Send exactly</p>
-          <p className="text-[#AAFF00] text-2xl font-bold">{amount} {selectedToken.symbol}</p>
+          <p className="text-[#AAFF00] text-2xl font-bold">{convertedAmount()} {selectedToken.symbol}</p>
         </div>
       )}
 
