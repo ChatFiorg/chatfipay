@@ -13,6 +13,45 @@ export default function DocsPage() {
           <p className="text-gray-400 text-sm mt-2">Accept Solana payments via API. Simple, fast, non-custodial.</p>
         </div>
 
+        {/* What is ChatFi Pay */}
+        <div className="bg-[#0d1a0d] border border-[#1a2e1a] rounded-2xl p-6 flex flex-col gap-3">
+          <p className="text-[#C7F284] text-xs font-bold uppercase tracking-wider">What is ChatFi Pay?</p>
+          <p className="text-white text-sm leading-relaxed">ChatFi Pay lets you accept <b>Solana payments</b> from anyone — no bank, no signup, no middleman. Your customers get a simple payment page or QR code. You receive SOL, USDC, or USDT directly to your wallet.</p>
+          <div className="flex flex-col gap-2 mt-1">
+            <div className="flex items-center gap-2"><span className="text-[#C7F284]">✔</span><span className="text-gray-300 text-sm">No technical knowledge needed to get started</span></div>
+            <div className="flex items-center gap-2"><span className="text-[#C7F284]">✔</span><span className="text-gray-300 text-sm">Payments go directly to your Solana wallet</span></div>
+            <div className="flex items-center gap-2"><span className="text-[#C7F284]">✔</span><span className="text-gray-300 text-sm">Share a link or QR code — works on any device</span></div>
+            <div className="flex items-center gap-2"><span className="text-[#C7F284]">✔</span><span className="text-gray-300 text-sm">1% fee only on confirmed payments via API</span></div>
+          </div>
+        </div>
+
+        {/* No-code section */}
+        <Section title="For Non-Developers (No Code Needed)">
+          <p className="text-gray-400 text-sm">You don{"'"}t need to write any code to use ChatFi Pay. Just follow these steps inside the ChatFi app:</p>
+          <Step n={1} title="Open the ChatFi App">
+            Tap <b>More</b> at the bottom of the screen, then tap <b>Payment Link</b>.
+          </Step>
+          <Step n={2} title="Set Your Amount & Label">
+            Enter how much you want to charge (or leave it blank for any amount), add a label like <i>Invoice #001</i>, and an optional note.
+          </Step>
+          <Step n={3} title="Generate & Share">
+            Tap <b>Generate Link</b>. You{"'"}ll get a payment page link and QR code. Share it via WhatsApp, email, or any platform — your customer opens it and pays instantly.
+          </Step>
+          <Step n={4} title="Track Payments">
+            Go to <b>More → Payment History</b> to see all your paid and pending payments in one place.
+          </Step>
+          <div className="bg-[#111] border border-[#1a1a1a] rounded-xl p-4 text-sm text-gray-400">
+            💡 <b className="text-white">Tip:</b> You can also go to <b className="text-white">More → Merchant</b> to set up a business name and webhook for automatic notifications when you get paid.
+          </div>
+        </Section>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-[#1a1a1a]" />
+          <span className="text-gray-600 text-xs uppercase tracking-wider">For Developers</span>
+          <div className="flex-1 h-px bg-[#1a1a1a]" />
+        </div>
+
         {/* Getting Started */}
         <Section title="Getting Started">
           <Step n={1} title="Open ChatFi App">
