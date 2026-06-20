@@ -46,15 +46,15 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       {/* Token selector */}
-      <div className="flex gap-2 w-full">
+      <div className="flex gap-2 w-full bg-[#1A1A1A] rounded-xl p-1">
         {TOKENS.map((token) => (
           <button
             key={token.symbol}
             onClick={() => setSelectedToken(token)}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
               selectedToken.symbol === token.symbol
-                ? "border-[#AAFF00] text-[#AAFF00] bg-[#AAFF00]/10"
-                : "border-[#2A2A2A] text-gray-400"
+                ? "bg-white text-black"
+                : "text-gray-400 hover:text-gray-200"
             }`}
           >
             {token.symbol}
@@ -64,10 +64,20 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
 
       {amount && (
         <div className="w-full bg-[#1A1A1A] rounded-xl p-3 text-center">
-          <p className="text-gray-400 text-sm">Send exactly</p>
-          <p className="text-[#AAFF00] text-2xl font-bold">{convertedAmount()} {selectedToken.symbol}</p>
+          <p className="text-gray-400 text-xs uppercase tracking-wide">Send exactly</p>
+          <p className="text-[#AAFF00] text-2xl font-bold font-mono tabular-nums mt-0.5">
+            {convertedAmount()} {selectedToken.symbol}
+          </p>
         </div>
       )}
+
+      {/* Network badge */}
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#AAFF00]/40 bg-[#AAFF00]/5">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#AAFF00]" />
+        <span className="text-[#AAFF00] text-[11px] font-semibold tracking-wide">
+          Solana network only
+        </span>
+      </div>
 
       {/* QR */}
       <div className="border border-[#AAFF00] rounded-2xl p-4 bg-[#141414]">
@@ -76,7 +86,7 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
 
       {/* Address */}
       <div className="w-full bg-[#1A1A1A] rounded-xl p-4 flex items-center gap-3">
-        <p className="text-gray-300 text-xs font-mono flex-1 break-all">{walletAddress}</p>
+        <p className="text-gray-300 text-xs font-mono tracking-wide flex-1 break-all">{walletAddress}</p>
         <button onClick={copy} className="shrink-0">
           {copied
             ? <Check size={18} className="text-[#AAFF00]" />
@@ -85,12 +95,9 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
         </button>
       </div>
 
-      <div className="w-full bg-[#1A1A1A] rounded-xl p-3">
-        <p className="text-gray-500 text-xs text-center">
-          Send {selectedToken.symbol} to the address above from any wallet or exchange.
-          {selectedToken.symbol !== "SOL" && " Make sure you send on Solana network."}
-        </p>
-      </div>
+      <p className="text-gray-600 text-xs text-center px-2">
+        Send {selectedToken.symbol} to the address above from any wallet or exchange on Solana.
+      </p>
     </div>
   );
 };
