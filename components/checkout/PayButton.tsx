@@ -4,12 +4,12 @@ import React, { useState } from "react";
 const WALLETS = [
   {
     name: "Phantom",
-    logo: "https://play-lh.googleusercontent.com/SqbR0R7gBEkXm8pzFpX8tF6qqEeVHXoSaxK1GKV7FHNRtJPFPGvKl4Z7-VhPOYY3KY=w240-h480-rw",
+    logo: "https://i.ibb.co/qNzBBk7/phantom.png",
     deeplink: (solUrl: string) => `https://phantom.app/ul/v1/browse/${encodeURIComponent(solUrl)}?ref=${encodeURIComponent("https://chatfipay-z9xh.vercel.app")}`,
   },
   {
     name: "Solflare",
-    logo: "https://play-lh.googleusercontent.com/XRuXHGVB_-CuX6MJwx5RIVMwAoR3DPamxJ6cErA_lH0R8m0G0BDdYi5KrFBwKXiHMQ=w240-h480-rw",
+    logo: "https://i.ibb.co/5nQzxBm/solflare.png",
     deeplink: (solUrl: string) => solUrl,
   },
   {
