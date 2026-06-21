@@ -4,52 +4,62 @@ import React, { useState } from "react";
 const WALLETS = [
   {
     name: "Phantom",
-    logo: "https://i.ibb.co/qNzBBk7/phantom.png",
+    bg: "#AB9FF2",
+    fg: "#1A1A1A",
     deeplink: (solUrl: string) => `https://phantom.app/ul/v1/browse/${encodeURIComponent(solUrl)}?ref=${encodeURIComponent("https://chatfipay-z9xh.vercel.app")}`,
   },
   {
     name: "Solflare",
-    logo: "https://i.ibb.co/5nQzxBm/solflare.png",
+    bg: "#FFA900",
+    fg: "#1A1A1A",
     deeplink: (solUrl: string) => solUrl,
   },
   {
     name: "Backpack",
-    logo: "https://play-lh.googleusercontent.com/8P4J-9dPwFmQbJZ04hgL4g0eBNXZBW7mfOWjmNPbXf5nz-1PB0hGzJuGgRiLRNK7A=w240-h480-rw",
+    bg: "#E33E3E",
+    fg: "#FFFFFF",
     deeplink: (solUrl: string) => `backpack://ul/v1/browse/${encodeURIComponent(solUrl)}`,
   },
   {
     name: "Trust Wallet",
-    logo: "https://play-lh.googleusercontent.com/kmFMsNnBRHqCHRlI5k3-5EkVSCiIfNZE2HONqtb-iIIAqMefzEW-5LwzrkmU-Bx5LQ=w240-h480-rw",
+    bg: "#3375BB",
+    fg: "#FFFFFF",
     deeplink: (solUrl: string) => solUrl,
   },
   {
     name: "Exodus",
-    logo: "https://play-lh.googleusercontent.com/SaSJhpfBtyFJrEkeTH7F-2HGnFgfJJMGYbHC5pN2H3yOTgJGX3r5lP7V2AZNOW5kAg=w240-h480-rw",
+    bg: "#5A4FCF",
+    fg: "#FFFFFF",
     deeplink: (solUrl: string) => solUrl,
   },
   {
     name: "OKX Wallet",
-    logo: "https://play-lh.googleusercontent.com/fNORM5e_g4wUWGb2n5c8IYdVAqm-_GWvfsBQ2d4X7OC-2bRmvEiEjzJuWxzRQzV8Qw=w240-h480-rw",
+    bg: "#FFFFFF",
+    fg: "#000000",
     deeplink: (solUrl: string) => `okex://main/wc?uri=${encodeURIComponent(solUrl)}`,
   },
   {
     name: "Coin98",
-    logo: "https://play-lh.googleusercontent.com/d5LIEqkXCZGVTVJFiWGYSBnFqzCi2tlgvfhX2ywCkyVFE9t0IqYp8o5nEBDlRzS9-Q=w240-h480-rw",
+    bg: "#6C5CE7",
+    fg: "#FFFFFF",
     deeplink: (solUrl: string) => solUrl,
   },
   {
     name: "Glow",
-    logo: "https://play-lh.googleusercontent.com/vNSC1DkUEGvz8WB6tICuMHJqTTDklB7HOKRHHGa-JR9JlZgJZKGbP3jFRdXGkCr3pR4=w240-h480-rw",
+    bg: "#B026FF",
+    fg: "#FFFFFF",
     deeplink: (solUrl: string) => solUrl,
   },
   {
     name: "Brave Wallet",
-    logo: "https://play-lh.googleusercontent.com/6Hf-NWl8mFXLiJDaHgxrzKvVHtItG_MPoYD2vR4bJAApEd6JwbTTOPRt3gL0l3CWBM=w240-h480-rw",
+    bg: "#FB542B",
+    fg: "#FFFFFF",
     deeplink: (solUrl: string) => solUrl,
   },
   {
     name: "ChatFi",
-    logo: "https://chatfi.pro/logo.png",
+    bg: "#AAFF00",
+    fg: "#000000",
     deeplink: (solUrl: string) => solUrl,
   },
 ];
@@ -63,7 +73,6 @@ interface PayButtonProps {
 
 const PayButton = ({ paymentId, walletAddress, amount, label }: PayButtonProps) => {
   const [status, setStatus] = useState<"idle" | "picking" | "paying">("idle");
-  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
 
   const buildSolanaUrl = () => {
     const base = `solana:${walletAddress}`;
@@ -94,20 +103,12 @@ const PayButton = ({ paymentId, walletAddress, amount, label }: PayButtonProps) 
               onClick={() => handleWalletPick(wallet)}
               className="flex items-center gap-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-3 py-3 hover:border-[#AAFF00] transition-all text-left"
             >
-              {!imgErrors[wallet.name] ? (
-                <img
-                  src={wallet.logo}
-                  alt={wallet.name}
-                  width={32}
-                  height={32}
-                  className="rounded-lg object-cover w-8 h-8"
-                  onError={() => setImgErrors(prev => ({ ...prev, [wallet.name]: true }))}
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-[#2A2A2A] flex items-center justify-center text-xs font-bold text-[#AAFF00]">
-                  {wallet.name[0]}
-                </div>
-              )}
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
+                style={{ backgroundColor: wallet.bg, color: wallet.fg }}
+              >
+                {wallet.name[0]}
+              </div>
               <span className="text-white font-medium text-xs">{wallet.name}</span>
             </button>
           ))}
