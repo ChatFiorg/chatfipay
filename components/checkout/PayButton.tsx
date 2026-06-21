@@ -14,7 +14,7 @@ const WALLETS = [
     logo: "/wallets/solflare.png",
     bg: "#FFA900",
     fg: "#1A1A1A",
-    deeplink: (solUrl: string) => solUrl,
+    deeplink: (solUrl: string) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(solUrl)}?ref=${encodeURIComponent("https://chatfipay-z9xh.vercel.app")}`,
   },
   {
     name: "Backpack",
