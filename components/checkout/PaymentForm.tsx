@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-
 import Input from "@/components/shared/Input";
 import Button from "@/components/shared/Button";
 
@@ -22,13 +21,19 @@ const PaymentForm = ({ walletAddress }: PaymentFormProps) => {
     setLoading(true);
     setError("");
     try {
-      const id = await createPaymentRequest(
-        walletAddress,
-        amount ? parseFloat(amount) : null,
-        label,
-        memo
-      );
-      router.push(`/pay/${id}`);
+      const res = await fetch("/api/payment/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress,
+          amount: amount ? parseFloat(amount) : null,
+          label,
+          memo,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      router.push(`/pay/${data.id}`);
     } catch (e) {
       setError("Failed to create payment link. Try again.");
     } finally {
