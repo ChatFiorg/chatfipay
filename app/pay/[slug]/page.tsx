@@ -36,7 +36,7 @@ export default async function PayPage({ params }: Props) {
           )}
           {payment.amount && (
             <p className="text-[#AAFF00] text-5xl font-bold font-mono tabular-nums tracking-tight mt-1">
-              {payment.amount} <span className="text-2xl align-top">SOL</span>
+              {payment.amount} <span className="text-2xl align-top">{(payment as any).token || "SOL"}</span>
             </p>
           )}
           {payment.memo && (
