@@ -13,8 +13,8 @@ async function getStoreByApiKey(apiKey: string | null, slug: string) {
 }
 
 // POST /api/store/[slug]/charge
-export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params;
+export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const apiKey = req.headers.get("x-api-key");
   const storeKey = await getStoreByApiKey(apiKey, slug);
   if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });

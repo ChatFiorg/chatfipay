@@ -3,8 +3,8 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 
 // POST /api/store/[slug]/webhook — called by ChatFi Pay on payment confirmed
-export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params;
+export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   try {
     const body = await req.json();
     const { orderId, txSignature, receivedAmount, payerWallet } = body;

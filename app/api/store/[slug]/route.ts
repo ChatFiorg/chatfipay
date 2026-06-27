@@ -14,8 +14,8 @@ async function getStoreByApiKey(apiKey: string | null, slug: string) {
 }
 
 // GET /api/store/[slug] — public store info + products
-export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   try {
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
