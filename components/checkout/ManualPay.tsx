@@ -1,38 +1,29 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Copy, Check } from "lucide-react";
 
 const TOKENS = [
-  { symbol: "SOL", mint: "native" },
   { symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
   { symbol: "USDT", mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" },
+  { symbol: "SOL", mint: "native" },
 ];
 
 interface Props {
   walletAddress: string;
   amount: number | null;
+  token?: string;
 }
 
-const ManualPay = ({ walletAddress, amount }: Props) => {
+const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
   const [copied, setCopied] = useState(false);
-  const [selectedToken, setSelectedToken] = useState(TOKENS[0]);
-  const [solPrice, setSolPrice] = useState<number | null>(null);
+  const defaultToken = TOKENS.find(t => t.symbol === token) || TOKENS[0];
+  const [selectedToken, setSelectedToken] = useState(defaultToken);
 
-  useEffect(() => {
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd")
-      .then(r => r.json())
-      .then(d => {
-        const price = d?.solana?.usd;
-        if (price) setSolPrice(parseFloat(price));
-      })
-      .catch(() => {});
-  }, []);
-
-  const convertedAmount = (): string => {
+  const displayAmount = (): string => {
     if (!amount) return "";
-    if (selectedToken.symbol === "SOL") return amount.toString();
-    if (!solPrice) return "...";
-    return (amount * solPrice).toFixed(2);
+    // Amount is already in the payment token (USDC for store payments)
+    // For SOL tab, just show the raw amount with a note
+    return amount.toString();
   };
 
   const copy = async () => {
@@ -45,19 +36,21 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {/* Token selector */}
+      {/* Token selector — USDC first */}
       <div className="flex gap-2 w-full bg-[#1A1A1A] rounded-xl p-1">
-        {TOKENS.map((token) => (
+        {TOKENS.map((t) => (
           <button
-            key={token.symbol}
-            onClick={() => setSelectedToken(token)}
+            key={t.symbol}
+            onClick={() => setSelectedToken(t)}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
-              selectedToken.symbol === token.symbol
-                ? "bg-white text-black"
+              selectedToken.symbol === t.symbol
+                ? t.symbol === "SOL"
+                  ? "bg-[#333] text-gray-300"
+                  : "bg-white text-black"
                 : "text-gray-400 hover:text-gray-200"
             }`}
           >
-            {token.symbol}
+            {t.symbol}
           </button>
         ))}
       </div>
@@ -65,9 +58,12 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
       {amount && (
         <div className="w-full bg-[#1A1A1A] rounded-xl p-3 text-center">
           <p className="text-gray-400 text-xs uppercase tracking-wide">Send exactly</p>
-          <p className="text-[#AAFF00] text-2xl font-bold font-mono tabular-nums mt-0.5">
-            {convertedAmount()} {selectedToken.symbol}
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-0.5 ${selectedToken.symbol === 'SOL' ? 'text-gray-400' : 'text-[#AAFF00]'}`}>
+            {displayAmount()} {selectedToken.symbol === 'SOL' ? token : selectedToken.symbol}
           </p>
+          {selectedToken.symbol === 'SOL' && (
+            <p className="text-gray-500 text-xs mt-1">SOL payments not supported for store orders. Use USDC or USDT.</p>
+          )}
         </div>
       )}
 
@@ -96,7 +92,7 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
       </div>
 
       <p className="text-gray-600 text-xs text-center px-2">
-        Send {selectedToken.symbol} to the address above from any wallet or exchange on Solana.
+        Send {selectedToken.symbol === 'SOL' ? token : selectedToken.symbol} to the address above from any wallet or exchange on Solana.
       </p>
     </div>
   );
