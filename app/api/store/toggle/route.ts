@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebaseAdmin";
 
-// POST /api/store/toggle — go live or offline
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -10,12 +8,12 @@ export async function POST(req: NextRequest) {
 
     if (!username || !ownerWallet || live === undefined) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-    const storeSnap = await getDoc(doc(db, "stores", username));
-    if (!storeSnap.exists() || storeSnap.data().ownerWallet !== ownerWallet) {
+    const storeSnap = await db.collection("stores").doc(username).get();
+    if (!storeSnap.exists || storeSnap.data()!.ownerWallet !== ownerWallet) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await updateDoc(doc(db, "stores", username), { live });
+    await db.collection("stores").doc(username).update({ live });
     return NextResponse.json({ success: true, live });
   } catch (e) {
     console.error(e);
