@@ -5,35 +5,31 @@ import crypto from "crypto";
 
 async function getNgnPerUsdc(): Promise<number> {
   try {
-    // Try exchangerate-api first
     const fxRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
     const fxData = await fxRes.json();
     const usdNgn = fxData?.rates?.NGN;
-    if (usdNgn && usdNgn > 100) return usdNgn; // USDC ≈ 1 USD
+    if (usdNgn && usdNgn > 100) return usdNgn;
   } catch {}
-
   try {
-    // Fallback: open.er-api.com
     const res = await fetch('https://open.er-api.com/v6/latest/USD');
     const data = await res.json();
     const usdNgn = data?.rates?.NGN;
     if (usdNgn && usdNgn > 100) return usdNgn;
   } catch {}
-
   try {
-    // Fallback: frankfurter
     const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=NGN');
     const data = await res.json();
     const usdNgn = data?.rates?.NGN;
     if (usdNgn && usdNgn > 100) return usdNgn;
   } catch {}
-
-  // Last resort fallback
   return 1600;
 }
 
-export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params;
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await context.params;
 
   try {
     const body = await req.json();
@@ -51,15 +47,14 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     const product = productSnap.data()!;
     if (!product.active) return NextResponse.json({ error: "Product unavailable" }, { status: 400 });
 
-    // Live NGN → USDC conversion
     const ngnPerUsdc = await getNgnPerUsdc();
     const amountUsdc = Math.round((product.price / ngnPerUsdc) * 100) / 100;
 
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
     const expiresAt = Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60000);
-
     const payLinkId = crypto.randomBytes(8).toString("hex");
+
     await db.collection("pay_links").doc(payLinkId).set({
       merchantId: slug,
       walletAddress: store.ownerWallet,
