@@ -15,7 +15,7 @@ async function getMerchantByApiKey(apiKey: string | null) {
     .limit(1)
     .get();
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  return { id: snap.docs[0].id, ...snap.docs[0].data() } as { id: string; walletAddress: string; [key: string]: any };
 }
 
 export async function POST(req: NextRequest) {

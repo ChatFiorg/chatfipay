@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       .orderBy("createdAt", "desc").limit(50);
 
     const snap = await query.get();
-    let orders = snap.docs.map(d => {
+    let orders: any[] = snap.docs.map(d => {
       const data = d.data();
       return {
         id: d.id,
