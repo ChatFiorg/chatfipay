@@ -15,7 +15,7 @@ export default async function PayPage({ params }: Props) {
   const payment = await getPaymentRequest(slug);
   if (!payment) return notFound();
 
-  const link = `https://chatfipay-z9xh.vercel.app/pay/${slug}`;
+  const link = `https://pay.chatfi.pro/pay/${slug}`;
   const createdAtMs = payment.createdAt?.toMillis
     ? payment.createdAt.toMillis()
     : Date.now();
