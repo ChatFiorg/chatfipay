@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       const productsSnap = await db.collection("stores").doc(username).collection("products").get();
       const products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      return NextResponse.json({ ...data, products });
+      return NextResponse.json({ ...data, products, template: data.template || 'dark' });
     }
 
     if (wallet) {
@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
       category: category || "",
       theme: theme || { primary: "#9945FF", bg: "#000000" },
       contact: contact || {},
+      template: body.template || 'dark',
       live: false,
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
