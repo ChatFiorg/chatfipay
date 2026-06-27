@@ -32,7 +32,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(walletAddress)}&color=AAFF00&bgcolor=141414`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(walletAddress)}&color=C7F284&bgcolor=141414`;
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
@@ -58,7 +58,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
       {amount && (
         <div className="w-full bg-[#1A1A1A] rounded-xl p-3 text-center">
           <p className="text-gray-400 text-xs uppercase tracking-wide">Send exactly</p>
-          <p className={`text-2xl font-bold font-mono tabular-nums mt-0.5 ${selectedToken.symbol === 'SOL' ? 'text-gray-400' : 'text-[#AAFF00]'}`}>
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-0.5 ${selectedToken.symbol === 'SOL' ? 'text-gray-400' : 'text-[#C7F284]'}`}>
             {displayAmount()} {selectedToken.symbol === 'SOL' ? token : selectedToken.symbol}
           </p>
           {selectedToken.symbol === 'SOL' && (
@@ -67,16 +67,8 @@ const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
         </div>
       )}
 
-      {/* Network badge */}
-      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#AAFF00]/40 bg-[#AAFF00]/5">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#AAFF00]" />
-        <span className="text-[#AAFF00] text-[11px] font-semibold tracking-wide">
-          Solana network only
-        </span>
-      </div>
-
       {/* QR */}
-      <div className="border border-[#AAFF00] rounded-2xl p-4 bg-[#141414]">
+      <div className="border border-[#C7F284] rounded-2xl p-4 bg-[#141414]">
         <img src={qrUrl} alt="Wallet QR" width={180} height={180} />
       </div>
 
@@ -85,7 +77,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
         <p className="text-gray-300 text-xs font-mono tracking-wide flex-1 break-all">{walletAddress}</p>
         <button onClick={copy} className="shrink-0">
           {copied
-            ? <Check size={18} className="text-[#AAFF00]" />
+            ? <Check size={18} className="text-[#C7F284]" />
             : <Copy size={18} className="text-gray-400" />
           }
         </button>

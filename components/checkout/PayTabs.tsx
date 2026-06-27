@@ -17,7 +17,7 @@ const PayTabs = ({ children, labels }: Props) => {
             onClick={() => setActive(i)}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
               active === i
-                ? "bg-[#AAFF00] text-black"
+                ? "bg-[#C7F284] text-black"
                 : "text-gray-400 hover:text-white"
             }`}
           >
