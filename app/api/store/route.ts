@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { username, ownerWallet, name, description, logo, banner, category, theme, contact } = body;
+    const { username, ownerWallet, name, description, logo, banner, favicon, category, theme, contact } = body;
 
     if (!username || !ownerWallet) return NextResponse.json({ error: "Missing username or ownerWallet" }, { status: 400 });
 
@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
       description: description || "",
       logo: logo || "",
       banner: banner || "",
+      favicon: favicon || "",
       category: category || "",
       theme: theme || { primary: "#9945FF", bg: "#000000" },
       contact: contact || {},
