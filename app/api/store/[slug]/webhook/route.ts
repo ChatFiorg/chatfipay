@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 
 // POST /api/store/[slug]/webhook — called by ChatFi Pay on payment confirmed
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -15,9 +15,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
+    const order = orderSnap.data()!;
     const now = Timestamp.now();
 
-    // Update order to paid
+    // Avoid double-processing if the webhook somehow fires twice for the same order
+    if (order.status === "paid") {
+      return NextResponse.json({ success: true, orderId, status: "paid", alreadyProcessed: true });
+    }
+
     await orderRef.update({
       status: "paid",
       txSignature: txSignature || null,
@@ -26,8 +31,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       paidAt: now,
     });
 
-    // Update pay_link status
-    const order = orderSnap.data()!;
     if (order.paymentRef) {
       await db.collection("pay_links").doc(order.paymentRef).update({
         status: "completed",
@@ -37,17 +40,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       });
     }
 
-    // Deduct stock if limited
-    const productRef = db.collection("stores").doc(slug).collection("products").doc(order.productId);
-    const productSnap = await productRef.get();
-    if (productSnap.exists) {
+    // Support both the current multi-item `items` array and legacy single-product orders
+    const lineItems: { productId: string; quantity: number }[] = Array.isArray(order.items) && order.items.length > 0
+      ? order.items.map((it: any) => ({ productId: it.productId, quantity: it.quantity || 1 }))
+      : order.productId
+        ? [{ productId: order.productId, quantity: order.quantity || 1 }]
+        : [];
+
+    for (const item of lineItems) {
+      if (!item.productId) continue;
+      const productRef = db.collection("stores").doc(slug).collection("products").doc(item.productId);
+      const productSnap = await productRef.get();
+      if (!productSnap.exists) continue;
+
       const product = productSnap.data()!;
-      if (product.stock != null && product.stock > 0) {
-        await productRef.update({ stock: product.stock - 1 });
-        if (product.stock - 1 === 0) {
-          await productRef.update({ active: false });
-        }
-      }
+      if (product.stock == null) continue; // unlimited stock, nothing to deduct
+
+      const newStock = Math.max(0, product.stock - item.quantity);
+      const update: any = { stock: FieldValue.increment(-Math.min(item.quantity, product.stock)) };
+      if (newStock === 0) update.active = false;
+      await productRef.update(update);
     }
 
     return NextResponse.json({ success: true, orderId, status: "paid" });
