@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { FieldValue } from "firebase-admin/firestore";
 
 function generateApiKey(username: string) {
   const rand = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -28,15 +29,24 @@ export async function GET(req: NextRequest) {
     if (wallet) {
       const walletSnap = await db.collection("storeWallets").doc(wallet).get();
       if (!walletSnap.exists) return NextResponse.json({ error: "No store for this wallet" }, { status: 404 });
-      const { username: slug } = walletSnap.data()!;
+      const { usernames = [], activeUsername } = walletSnap.data()!;
 
-      const snap = await db.collection("stores").doc(slug).get();
-      const data = snap.data()!;
+      if (!usernames.length) return NextResponse.json({ error: "No store for this wallet" }, { status: 404 });
 
-      const keySnap = await db.collection("storeKeys").doc(slug).get();
-      const keyData = keySnap.exists ? keySnap.data()! : {};
+      const stores = await Promise.all(
+        usernames.map(async (slug: string) => {
+          const snap = await db.collection("stores").doc(slug).get();
+          if (!snap.exists) return null;
+          const keySnap = await db.collection("storeKeys").doc(slug).get();
+          const keyData = keySnap.exists ? keySnap.data()! : {};
+          return { ...snap.data(), apiKeyPrefix: keyData.apiKeyPrefix || "" };
+        })
+      );
 
-      return NextResponse.json({ ...data, apiKeyPrefix: keyData.apiKeyPrefix || "" });
+      return NextResponse.json({
+        stores: stores.filter(Boolean),
+        activeUsername: activeUsername || usernames[0],
+      });
     }
   } catch (e) {
     console.error(e);
@@ -51,16 +61,15 @@ export async function POST(req: NextRequest) {
 
     if (!username || !ownerWallet) return NextResponse.json({ error: "Missing username or ownerWallet" }, { status: 400 });
 
-    // Check username taken
     const existing = await db.collection("storeUsernames").doc(username).get();
     if (existing.exists && existing.data()!.ownerWallet !== ownerWallet) {
       return NextResponse.json({ error: "Username already taken" }, { status: 409 });
     }
 
-    // Generate API key if new store
     const keySnap = await db.collection("storeKeys").doc(username).get();
+    const isNewStore = !keySnap.exists;
     let apiKeyPrefix = "";
-    if (!keySnap.exists) {
+    if (isNewStore) {
       const apiKey = generateApiKey(username);
       apiKeyPrefix = apiKey.substring(0, 20);
       await db.collection("storeKeys").doc(username).set({
@@ -75,7 +84,6 @@ export async function POST(req: NextRequest) {
       apiKeyPrefix = keySnap.data()!.apiKeyPrefix;
     }
 
-    // Save store
     await db.collection("stores").doc(username).set({
       username,
       ownerWallet,
@@ -92,11 +100,17 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     }, { merge: true });
 
-    // Save username registry
     await db.collection("storeUsernames").doc(username).set({ username, ownerWallet });
 
-    // Save wallet lookup
-    await db.collection("storeWallets").doc(ownerWallet).set({ username, ownerWallet });
+    const walletRef = db.collection("storeWallets").doc(ownerWallet);
+    const walletSnap = await walletRef.get();
+    if (!walletSnap.exists) {
+      await walletRef.set({ ownerWallet, usernames: [username], activeUsername: username });
+    } else {
+      const update: any = { usernames: FieldValue.arrayUnion(username) };
+      if (isNewStore) update.activeUsername = username;
+      await walletRef.set(update, { merge: true });
+    }
 
     return NextResponse.json({ success: true, apiKeyPrefix });
   } catch (e) {
