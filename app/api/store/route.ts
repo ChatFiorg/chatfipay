@@ -87,25 +87,32 @@ export async function POST(req: NextRequest) {
     const storeUpdate: any = {
       username,
       ownerWallet,
-      name: name || "",
-      description: description || "",
-      logo: logo || "",
-      banner: banner || "",
-      favicon: favicon || "",
-      category: category || "",
-      contact: contact || {},
       updatedAt: new Date().toISOString(),
     };
 
-    if (theme) storeUpdate.theme = theme;
-    if (body.template) storeUpdate.template = body.template;
+    // Partial-update semantics: only write a field if the caller actually sent it,
+    // or default it when the store is first being created. This way a screen that
+    // only updates one thing (e.g. just the template) can never silently blank out
+    // every other field on the store.
+    const setIfProvidedOrNew = (key: string, value: any, defaultValue: any) => {
+      if (value !== undefined) {
+        storeUpdate[key] = value;
+      } else if (isNewStore) {
+        storeUpdate[key] = defaultValue;
+      }
+    };
+
+    setIfProvidedOrNew('name', name, "");
+    setIfProvidedOrNew('description', description, "");
+    setIfProvidedOrNew('logo', logo, "");
+    setIfProvidedOrNew('banner', banner, "");
+    setIfProvidedOrNew('favicon', favicon, "");
+    setIfProvidedOrNew('category', category, "");
+    setIfProvidedOrNew('contact', contact, {});
+    setIfProvidedOrNew('theme', theme, { primary: "#9945FF", bg: "#000000" });
+    setIfProvidedOrNew('template', body.template, 'dark');
 
     if (isNewStore) {
-      // Only apply these defaults when the store is first created.
-      // On edits, omit them entirely so merge:true preserves whatever is already saved
-      // (otherwise every edit would silently reset the live toggle and template/theme).
-      if (!theme) storeUpdate.theme = { primary: "#9945FF", bg: "#000000" };
-      if (!body.template) storeUpdate.template = 'dark';
       storeUpdate.live = false;
       storeUpdate.createdAt = new Date().toISOString();
     }
