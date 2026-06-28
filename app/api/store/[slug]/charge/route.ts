@@ -97,7 +97,7 @@ export async function POST(
 
     await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       orderId,
       paymentLink: `https://pay.chatfi.pro/pay/${payLinkId}`,
@@ -108,8 +108,23 @@ export async function POST(
       status: "pending",
       expiresAt: expiresAt.toDate().toISOString(),
     });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    return response;
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }
