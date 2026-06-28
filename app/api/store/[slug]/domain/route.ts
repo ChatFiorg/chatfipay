@@ -12,6 +12,16 @@ function vercelHeaders() {
   };
 }
 
+function dnsInstructionsFor(domain: string) {
+  const parts = domain.split(".");
+  const isApex = parts.length === 2; // e.g. example.com
+  if (isApex) {
+    return { type: "apex", recordType: "A", name: "@", value: "76.76.21.21" };
+  }
+  const subPart = parts.slice(0, parts.length - 2).join(".");
+  return { type: "subdomain", recordType: "CNAME", name: subPart, value: "cname.vercel-dns.com" };
+}
+
 async function verifyOwner(slug: string, ownerWallet: string) {
   const snap = await db.collection("stores").doc(slug).get();
   if (!snap.exists) return { ok: false, status: 404, error: "Store not found" };
@@ -65,6 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       domain: cleanDomain,
       verified: !!vercelData.verified,
       verification: vercelData.verification || [],
+      dns: dnsInstructionsFor(cleanDomain),
     });
   } catch (e) {
     console.error(e);
@@ -99,6 +110,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       verified,
       misconfigured: !!configData.misconfigured,
       verification: statusData.verification || [],
+      dns: dnsInstructionsFor(domain),
     });
   } catch (e) {
     console.error(e);
