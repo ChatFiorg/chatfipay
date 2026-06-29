@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 
+function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("0")) digits = "234" + digits.slice(1);
+  else if (!digits.startsWith("234")) digits = "234" + digits;
+  return digits;
+}
+
 // POST /api/store/[slug]/webhook — called by ChatFi Pay on payment confirmed
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -23,12 +32,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ success: true, orderId, status: "paid", alreadyProcessed: true });
     }
 
+    const normalizedPhone = normalizePhone(order.buyerPhone);
+
     await orderRef.update({
       status: "paid",
       txSignature: txSignature || null,
       receivedAmount: receivedAmount || null,
       payerWallet: payerWallet || null,
       paidAt: now,
+      buyerPhoneNormalized: normalizedPhone,
     });
 
     if (order.paymentRef) {
@@ -38,6 +50,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         txSignature: txSignature || null,
         receivedAmount: receivedAmount || null,
       });
+    }
+
+    // Upsert the customer record (CRM)
+    if (normalizedPhone) {
+      const custRef = db.collection("stores").doc(slug).collection("customers").doc(normalizedPhone);
+      const custSnap = await custRef.get();
+      const custUpdate: any = {
+        phone: order.buyerPhone,
+        name: order.buyerName || null,
+        email: order.buyerEmail || null,
+        address: order.buyerAddress || null,
+        totalSpent: FieldValue.increment(order.amount || 0),
+        orderCount: FieldValue.increment(1),
+        lastOrderAt: now,
+      };
+      if (!custSnap.exists) custUpdate.firstOrderAt = now;
+      await custRef.set(custUpdate, { merge: true });
     }
 
     // Support both the current multi-item `items` array and legacy single-product orders
