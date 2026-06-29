@@ -69,13 +69,14 @@ export async function POST(req: NextRequest) {
     const keySnap = await db.collection("storeKeys").doc(username).get();
     const isNewStore = !keySnap.exists;
     let apiKeyPrefix = "";
+    let newApiKey: string | null = null; // only set (and returned) on first creation
     if (isNewStore) {
-      const apiKey = generateApiKey(username);
-      apiKeyPrefix = apiKey.substring(0, 20);
+      newApiKey = generateApiKey(username);
+      apiKeyPrefix = newApiKey.substring(0, 20);
       await db.collection("storeKeys").doc(username).set({
         username,
         ownerWallet,
-        apiKey,
+        apiKey: newApiKey,
         apiKeyPrefix,
         createdAt: new Date().toISOString(),
         lastUsed: null,
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
       await walletRef.set(update, { merge: true });
     }
 
-    return NextResponse.json({ success: true, apiKeyPrefix });
+    return NextResponse.json({ success: true, apiKeyPrefix, apiKey: newApiKey });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
