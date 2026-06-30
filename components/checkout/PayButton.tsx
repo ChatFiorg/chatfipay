@@ -15,14 +15,14 @@ const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
 const WALLETS = [
-  { name: "Phantom", icon: "https://phantom.app/favicon.ico", scheme: "phantom" },
-  { name: "Solflare", icon: "https://solflare.com/favicon.ico", scheme: "solflare" },
-  { name: "Backpack", icon: "https://backpack.app/favicon.ico", scheme: "backpack" },
+  { name: "Phantom", icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Phantom_SVG_Icon.svg/240px-Phantom_SVG_Icon.svg.png", scheme: "phantom" },
+  { name: "Solflare", icon: "https://solflare.com/assets/logo.png", scheme: "solflare" },
+  { name: "Backpack", icon: "https://imagedelivery.net/DOYtEIkMHO3QIBivwR35XQ/6fae4a1f-dcff-49c6-9e89-9e1e84a87100/public", scheme: "backpack" },
   { name: "OKX Wallet", icon: "https://static.okx.com/cdn/assets/imgs/221/F2CE3C14CA9E6A02.png", scheme: "okex" },
-  { name: "Coinbase Wallet", icon: "https://www.coinbase.com/favicon.ico", scheme: "cbwallet" },
-  { name: "Trust Wallet", icon: "https://trustwallet.com/favicon.ico", scheme: "trust" },
+  { name: "Coinbase Wallet", icon: "https://images.ctfassets.net/q5ulk4bp65r7/3TBS4oVkD1ghowTqyceHIv/67549d9044a14cbe70f5c6866e26c66c/favicon.ico", scheme: "cbwallet" },
+  { name: "Trust Wallet", icon: "https://trustwallet.com/assets/images/media/assets/trust_platform.svg", scheme: "trust" },
   { name: "Glow", icon: "https://glow.app/favicon.ico", scheme: "glow" },
-  { name: "Exodus", icon: "https://www.exodus.com/favicon.ico", scheme: "exodus" },
+  { name: "Exodus", icon: "https://cdn.exodus.com/images/exodus-logo-icon.png", scheme: "exodus" },
 ];
 
 function buildSolanaPayUrl(opts: {
