@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { buildSolanaPayUrl } from "@/lib/solanaPay";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, ChevronDown } from "lucide-react";
 
 interface PayButtonProps {
   paymentId: string;
@@ -12,10 +11,73 @@ interface PayButtonProps {
   storeUsername?: string;
 }
 
-const PayButton = ({ paymentId, walletAddress, amount, label, token = "SOL", storeUsername }: PayButtonProps) => {
-  const [status, setStatus] = useState<"idle" | "paying" | "polling">("idle");
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
+const WALLETS = [
+  { name: "Phantom", icon: "https://phantom.app/favicon.ico", scheme: "phantom" },
+  { name: "Solflare", icon: "https://solflare.com/favicon.ico", scheme: "solflare" },
+  { name: "Backpack", icon: "https://backpack.app/favicon.ico", scheme: "backpack" },
+  { name: "OKX Wallet", icon: "https://static.okx.com/cdn/assets/imgs/221/F2CE3C14CA9E6A02.png", scheme: "okex" },
+  { name: "Coinbase Wallet", icon: "https://www.coinbase.com/favicon.ico", scheme: "cbwallet" },
+  { name: "Trust Wallet", icon: "https://trustwallet.com/favicon.ico", scheme: "trust" },
+  { name: "Glow", icon: "https://glow.app/favicon.ico", scheme: "glow" },
+  { name: "Exodus", icon: "https://www.exodus.com/favicon.ico", scheme: "exodus" },
+];
+
+function buildSolanaPayUrl(opts: {
+  walletAddress: string;
+  amount: number | null;
+  token: string;
+  label: string;
+  reference: string;
+  message: string;
+}) {
+  const { walletAddress, amount, token, label, reference, message } = opts;
+  const params = new URLSearchParams();
+  if (amount) params.set("amount", String(amount));
+  const mint = token === "USDT" ? USDT_MINT : token === "USDC" ? USDC_MINT : null;
+  if (mint) params.set("spl-token", mint);
+  if (label) params.set("label", label);
+  if (reference) params.set("reference", reference);
+  if (message) params.set("message", message);
+  return `solana:${walletAddress}?${params.toString()}`;
+}
+
+function buildWalletUrl(scheme: string, solanaPayUrl: string) {
+  // Each wallet has its own deeplink format
+  switch (scheme) {
+    case "phantom":
+      return `https://phantom.app/ul/v1/browse/${encodeURIComponent(solanaPayUrl)}?ref=${encodeURIComponent("https://pay.chatfi.pro")}`;
+    case "solflare":
+      return `solflare:${solanaPayUrl.replace("solana:", "")}`;
+    case "backpack":
+      return `backpack://v1/browse/${encodeURIComponent(solanaPayUrl)}`;
+    case "okex":
+      return `okex://main/wc?uri=${encodeURIComponent(solanaPayUrl)}`;
+    case "cbwallet":
+      return `cbwallet://dapp?url=${encodeURIComponent(solanaPayUrl)}`;
+    case "trust":
+      return `trust://open_url?coin_id=501&url=${encodeURIComponent(solanaPayUrl)}`;
+    default:
+      return solanaPayUrl;
+  }
+}
+
+const PayButton = ({ paymentId, walletAddress, amount, label, token = "USDC", storeUsername }: PayButtonProps) => {
   const [paid, setPaid] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [polling, setPolling] = useState(false);
+  const [pollCount, setPollCount] = useState(0);
+  const [showWallets, setShowWallets] = useState(false);
+
+  const solanaPayUrl = buildSolanaPayUrl({
+    walletAddress,
+    amount,
+    token,
+    label,
+    reference: paymentId,
+    message: "Payment via ChatFi Pay",
+  });
 
   const pollPayment = useCallback(async () => {
     try {
@@ -23,7 +85,7 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "SOL", sto
       const data = await res.json();
       if (data.status === "completed") {
         setPaid(true);
-        // Redirect to store after 2 seconds
+        setPolling(false);
         if (storeUsername) {
           setTimeout(() => {
             window.location.href = `https://store.chatfi.pro/${storeUsername}?order=${paymentId}&paid=true`;
@@ -36,26 +98,14 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "SOL", sto
   }, [paymentId, storeUsername]);
 
   useEffect(() => {
-    if (status !== "polling") return;
+    if (!polling) return;
     const interval = setInterval(async () => {
+      setPollCount(c => c + 1);
       const done = await pollPayment();
       if (done) clearInterval(interval);
     }, 4000);
     return () => clearInterval(interval);
-  }, [status, pollPayment]);
-
-  // Countdown after opening wallet
-  useEffect(() => {
-    if (status !== "paying") return;
-    setCountdown(3);
-    const t = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) { clearInterval(t); setStatus("polling"); return 0; }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [status]);
+  }, [polling, pollPayment]);
 
   if (paid) {
     return (
@@ -69,43 +119,68 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "SOL", sto
     );
   }
 
-  const handlePay = () => {
-    // Use solana: deeplink — works with ALL Solana wallets (25+)
-    const url = buildSolanaPayUrl({
-      walletAddress,
-      amount,
-      token,
-      label,
-      reference: paymentId,
-      message: "Payment via ChatFi Pay",
-    });
-    setStatus("paying");
-    window.location.href = url;
-  };
-
-  if (status === "polling") {
-    return (
-      <div className="flex flex-col items-center gap-3 py-2">
-        <div className="flex items-center gap-2 text-[#C7F284]">
-          <Loader2 size={18} className="animate-spin" />
-          <span className="text-sm font-medium">Confirming payment...</span>
-        </div>
-        <p className="text-gray-500 text-xs text-center">Checking blockchain for your transaction</p>
-        <button onClick={() => setStatus("idle")} className="text-gray-600 text-xs underline">Cancel</button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3 w-full">
+      {/* Main pay button */}
       <button
-        onClick={handlePay}
-        disabled={status === "paying"}
-        className="w-full bg-[#C7F284] text-black font-bold rounded-xl py-4 text-base hover:opacity-90 transition-all disabled:opacity-50"
+        onClick={() => setShowWallets(!showWallets)}
+        className="w-full bg-[#C7F284] text-black font-bold rounded-xl py-4 text-base hover:opacity-90 transition-all flex items-center justify-center gap-2"
       >
-        {status === "paying" ? `Opening wallet... (${countdown})` : `Pay${amount ? ` ${amount} ${token}` : ""}`}
+        Select Wallet to Pay {amount ? `${amount} ${token}` : ""}
+        <ChevronDown size={18} className={`transition-transform ${showWallets ? 'rotate-180' : ''}`} />
       </button>
-      <p className="text-gray-500 text-xs text-center">Opens any Solana wallet app on your device</p>
+
+      {/* Wallet list */}
+      {showWallets && (
+        <div className="flex flex-col gap-2 bg-[#1A1A1A] rounded-xl p-3 border border-[#2A2A2A]">
+          {WALLETS.map(wallet => (
+            <a
+              key={wallet.scheme}
+              href={buildWalletUrl(wallet.scheme, solanaPayUrl)}
+              onClick={() => { setPolling(true); setShowWallets(false); }}
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#222] transition-all"
+            >
+              <img
+                src={wallet.icon}
+                alt={wallet.name}
+                width={28}
+                height={28}
+                className="rounded-lg"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <span className="text-white text-sm font-semibold">{wallet.name}</span>
+              <span className="ml-auto text-gray-500 text-xs">Open →</span>
+            </a>
+          ))}
+          {/* Universal fallback */}
+          <a
+            href={solanaPayUrl}
+            onClick={() => { setPolling(true); setShowWallets(false); }}
+            className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#222] transition-all border-t border-[#2A2A2A] mt-1 pt-3"
+          >
+            <div className="w-7 h-7 rounded-lg bg-[#C7F284]/10 flex items-center justify-center text-[#C7F284] text-xs font-bold">◎</div>
+            <span className="text-gray-400 text-sm font-semibold">Other Solana Wallet</span>
+            <span className="ml-auto text-gray-500 text-xs">Open →</span>
+          </a>
+        </div>
+      )}
+
+      {polling && (
+        <div className="flex flex-col items-center gap-2 py-2">
+          <div className="flex items-center gap-2 text-[#C7F284]">
+            <Loader2 size={16} className="animate-spin" />
+            <span className="text-sm font-medium">
+              Confirming payment{pollCount > 0 ? ` (${pollCount})` : '...'}
+            </span>
+          </div>
+          <p className="text-gray-500 text-xs text-center">Waiting for blockchain confirmation</p>
+          <button onClick={() => setPolling(false)} className="text-gray-600 text-xs underline">Cancel</button>
+        </div>
+      )}
+
+      {!polling && (
+        <p className="text-gray-500 text-xs text-center">Choose your Solana wallet app to complete payment</p>
+      )}
     </div>
   );
 };
