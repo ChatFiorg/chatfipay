@@ -7,9 +7,13 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 
-// Just enough for one sweep tx fee (~0.000005 SOL) plus a margin for
-// ATA creation when the merchant's USDC token account doesn't exist yet.
-const FUNDING_AMOUNT_LAMPORTS = 30_000; // 0.00003 SOL
+// Solana requires any account holding SOL to either be at 0 or above
+// the rent-exemption minimum (~890,880 lamports for a 0-byte account).
+// We fund just above that minimum, covering rent-exemption + the sweep
+// transaction's fee + ATA creation if needed. The reclaim step in
+// sweep.ts drains it back to exactly 0 afterward (zero balance is
+// always allowed, it's only small-nonzero that gets rejected).
+const FUNDING_AMOUNT_LAMPORTS = 1_000_000; // 0.001 SOL
 
 export async function fundDepositAddress(depositAddress: string): Promise<string | null> {
   const rpcUrl = process.env.HELIUS_RPC_URL;
