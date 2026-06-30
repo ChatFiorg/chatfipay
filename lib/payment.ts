@@ -3,6 +3,7 @@ import { db } from "./firebaseAdmin";
 export interface PaymentRequest {
   id: string;
   walletAddress: string;
+  merchantWallet?: string;
   amount: number | null;
   token: string;
   label: string;
@@ -22,6 +23,7 @@ export async function getPaymentRequest(id: string): Promise<PaymentRequest | nu
     return {
       id,
       walletAddress: d.walletAddress,
+      merchantWallet: d.merchantWallet || null,
       amount: d.amount,
       token: d.token || "SOL",
       label: d.label,

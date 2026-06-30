@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPaymentRequest, markPaymentComplete } from "@/lib/payment";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { sweepPayment } from "@/lib/sweep";
 
 async function sendPushNotification(token: string, amount: number | null, label: string) {
   await fetch("https://exp.host/--/api/v2/push/send", {
@@ -132,6 +133,14 @@ export async function GET(
           const paidBy = tx.feePayer || "unknown";
 
           await markPaymentComplete(slug, paidBy, txSignature);
+
+          if (payment.merchantWallet) {
+            try {
+              await sweepPayment(slug, payment.walletAddress, payment.merchantWallet);
+            } catch (e) {
+              console.error("Sweep failed (payment still marked complete):", e);
+            }
+          }
 
           const merchant = await getMerchantData(payment.walletAddress);
 

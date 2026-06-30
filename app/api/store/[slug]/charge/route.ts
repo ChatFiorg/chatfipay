@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { derivePaymentAddress } from "@/lib/derivedWallet";
+import { fundDepositAddress } from "@/lib/fundDeposit";
 
 async function getNgnPerUsdc(): Promise<number> {
   try {
@@ -55,9 +57,18 @@ export async function POST(
     const expiresAt = Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60000);
     const payLinkId = crypto.randomBytes(8).toString("hex");
 
+    const depositAddress = derivePaymentAddress(payLinkId);
+
+    try {
+      await fundDepositAddress(depositAddress);
+    } catch (e) {
+      console.error("Failed to fund deposit address (sweep will fail later):", e);
+    }
+
     await db.collection("pay_links").doc(payLinkId).set({
       merchantId: slug,
-      walletAddress: store.ownerWallet,
+      walletAddress: depositAddress,
+      merchantWallet: store.ownerWallet,
       amount: amountUsdc,
       token: "USDC",
       label: `${product.name} x1`,
