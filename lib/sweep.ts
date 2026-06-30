@@ -2,6 +2,8 @@ import {
   Connection,
   PublicKey,
   Transaction,
+  SystemProgram,
+  Keypair,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
@@ -9,22 +11,18 @@ import {
   createTransferInstruction,
   getAccount,
 } from "@solana/spl-token";
+import bs58 from "bs58";
 import { derivePaymentKeypair } from "./derivedWallet";
 
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
-/**
- * Sweeps the full USDC balance from a payment's unique derived deposit
- * address to the merchant's main wallet. Called right after a payment
- * is confirmed. The deposit keypair is re-derived on the fly (never
- * stored), used once to sign the sweep, then discarded.
- */
 export async function sweepPayment(
   paymentId: string,
   depositAddress: string,
   merchantWallet: string
 ): Promise<string | null> {
   const rpcUrl = process.env.HELIUS_RPC_URL;
+  const treasuryKey = process.env.TREASURY_PRIVATE_KEY;
   if (!rpcUrl) throw new Error("RPC not configured");
   if (!merchantWallet) throw new Error("No merchant wallet to sweep to");
 
@@ -66,6 +64,32 @@ export async function sweepPayment(
       fromAccount.amount
     )
   );
+
+  if (treasuryKey) {
+    try {
+      const treasuryPubkey = Keypair.fromSecretKey(bs58.decode(treasuryKey)).publicKey;
+      const currentBalance = await connection.getBalance(depositKeypair.publicKey);
+      const { blockhash: probeBlockhash } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = probeBlockhash;
+      tx.feePayer = depositKeypair.publicKey;
+
+      const feeCalc = await connection.getFeeForMessage(tx.compileMessage(), "confirmed");
+      const fee = feeCalc?.value || 5000;
+      const reclaimable = currentBalance - fee;
+
+      if (reclaimable > 0) {
+        tx.add(
+          SystemProgram.transfer({
+            fromPubkey: depositKeypair.publicKey,
+            toPubkey: treasuryPubkey,
+            lamports: reclaimable,
+          })
+        );
+      }
+    } catch (e) {
+      console.error("SOL reclaim estimation failed, skipping reclaim:", e);
+    }
+  }
 
   const { blockhash } = await connection.getLatestBlockhash();
   tx.recentBlockhash = blockhash;

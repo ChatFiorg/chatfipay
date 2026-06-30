@@ -7,7 +7,9 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 
-const FUNDING_AMOUNT_LAMPORTS = 2_000_000; // 0.002 SOL
+// Just enough for one sweep tx fee (~0.000005 SOL) plus a margin for
+// ATA creation when the merchant's USDC token account doesn't exist yet.
+const FUNDING_AMOUNT_LAMPORTS = 30_000; // 0.00003 SOL
 
 export async function fundDepositAddress(depositAddress: string): Promise<string | null> {
   const rpcUrl = process.env.HELIUS_RPC_URL;
