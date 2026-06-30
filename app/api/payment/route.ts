@@ -11,13 +11,15 @@ const DEFAULT_EXPIRY_MINUTES = 60 * 24;
 async function getMerchantByApiKey(apiKey: string | null) {
   if (!apiKey) return null;
   const snap = await db
-    .collection("pay_merchants")
+    .collection("merchants")
     .where("apiKey", "==", apiKey)
-    .where("revoked", "==", false)
     .limit(1)
     .get();
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as { id: string; walletAddress: string; [key: string]: any };
+  const doc = snap.docs[0];
+  const data = doc.data();
+  if (data.revoked === true) return null;
+  return { id: doc.id, walletAddress: data.walletAddress || doc.id, ...data } as { id: string; walletAddress: string; [key: string]: any };
 }
 
 export async function POST(req: NextRequest) {
