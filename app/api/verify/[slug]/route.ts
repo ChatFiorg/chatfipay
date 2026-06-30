@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPaymentRequest, markPaymentComplete } from "@/lib/payment";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { collection, query, where, getDocs } from "firebase/firestore";
 
 async function sendPushNotification(token: string, amount: number | null, label: string) {
   await fetch("https://exp.host/--/api/v2/push/send", {
@@ -10,8 +9,8 @@ async function sendPushNotification(token: string, amount: number | null, label:
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       to: token,
-      title: "Payment Received!",
-      body: `${amount ? `${amount} SOL` : "Payment"} received${label ? ` for ${label}` : ""}`,
+      title: "Payment Received! 🎉",
+      body: `${amount ? `$${amount} USDC` : "Payment"} received${label ? ` for ${label}` : ""}`,
       sound: "default",
     }),
   });
@@ -81,127 +80,94 @@ export async function GET(
       return NextResponse.json({ status: "completed", txSignature: payment.txSignature });
     }
 
-    const rpcUrl = process.env.HELIUS_RPC_URL;
-    if (!rpcUrl) {
-      return NextResponse.json({ error: "RPC not configured" }, { status: 500 });
+    const heliusKey = process.env.HELIUS_API_KEY || process.env.HELIUS_RPC_URL?.split('api-key=')?.[1];
+    if (!heliusKey) {
+      return NextResponse.json({ error: "Helius not configured" }, { status: 500 });
     }
 
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "getSignaturesForAddress",
-        params: [payment.walletAddress, { limit: 20 }],
-      }),
-    });
+    const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+    const expectedMint = payment.token === "USDT" ? USDT_MINT : USDC_MINT;
+    const expectedAmount = payment.amount ? payment.amount : null;
 
-    const data = await res.json();
-    const signatures = data.result || [];
-
-    // Only check transactions after payment was created
     const createdAtMs = payment.createdAt?.toMillis
       ? payment.createdAt.toMillis()
       : typeof payment.createdAt === "string"
       ? new Date(payment.createdAt).getTime()
       : Date.now() - 86400000;
 
-    const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
-    const expectedMint = payment.token === "USDT" ? USDT_MINT : USDC_MINT;
-    const expectedAmount = payment.amount ? Math.round(payment.amount * 1_000_000) : null;
+    // Use Helius Enhanced Transactions API — parses token transfers automatically
+    const heliusRes = await fetch(
+      `https://api.helius.xyz/v0/addresses/${payment.walletAddress}/transactions?api-key=${heliusKey}&limit=20&type=TRANSFER`,
+    );
+    const txList = await heliusRes.json();
 
-    for (const sig of signatures) {
-      // Skip txs before payment was created
-      if (sig.blockTime && sig.blockTime * 1000 < createdAtMs) continue;
+    if (!Array.isArray(txList)) {
+      return NextResponse.json({ status: "pending" });
+    }
 
-      const txRes = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getTransaction",
-          params: [sig.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
-        }),
-      });
+    for (const tx of txList) {
+      // Skip txs more than 24h before payment was created
+      const txTime = (tx.timestamp || 0) * 1000;
+      if (txTime < createdAtMs - 86400000) continue;
+      if (tx.transactionError) continue;
 
-      const txData = await txRes.json();
-      const tx = txData.result;
-      if (!tx) continue;
-
-      const accounts = tx.transaction?.message?.accountKeys || [];
-      const instructions = tx.transaction?.message?.instructions || [];
-      const innerInstructions = tx.meta?.innerInstructions || [];
-
-      // Check for reference key match (Solana Pay standard)
-      const hasReference = accounts.some((a: any) => a.pubkey === slug);
-
-      // Check for USDC/USDT transfer to merchant wallet
-      let hasTokenTransfer = false;
-      const allInstructions = [
-        ...instructions,
-        ...innerInstructions.flatMap((ii: any) => ii.instructions || []),
-      ];
-      for (const ix of allInstructions) {
-        const parsed = ix.parsed;
-        if (!parsed) continue;
-        const type = parsed.type;
-        const info = parsed.info || {};
+      // Check tokenTransfers array — Helius parses these cleanly
+      const tokenTransfers = tx.tokenTransfers || [];
+      for (const transfer of tokenTransfers) {
         if (
-          (type === "transfer" || type === "transferChecked") &&
-          info.mint === expectedMint &&
-          info.destination &&
-          accounts.some((a: any) => a.pubkey === payment.walletAddress) &&
-          (!expectedAmount || Math.abs((info.tokenAmount?.amount || info.amount || 0) - expectedAmount) < 10000)
+          transfer.mint === expectedMint &&
+          transfer.toUserAccount === payment.walletAddress &&
+          (!expectedAmount || Math.abs(transfer.tokenAmount - expectedAmount) < 0.01)
         ) {
-          hasTokenTransfer = true;
-          break;
+          const txSignature = tx.signature;
+          const paidBy = tx.feePayer || "unknown";
+
+          await markPaymentComplete(slug, paidBy, txSignature);
+
+          const merchant = await getMerchantData(payment.walletAddress);
+
+          if (merchant?.expoPushToken) {
+            await sendPushNotification(merchant.expoPushToken, payment.amount, payment.label);
+          } else {
+            try {
+              const userSnap = await getDoc(doc(db, "chatfi_users", payment.walletAddress));
+              const userData = userSnap.data();
+              if (userData?.expoPushToken) {
+                await sendPushNotification(userData.expoPushToken, payment.amount, payment.label);
+              }
+            } catch (e) {}
+          }
+
+          if (merchant?.webhookUrl) {
+            await fireWebhook(merchant.webhookUrl, payment, txSignature);
+          }
+
+          await updateMerchantStats(payment.walletAddress, payment.amount);
+
+          return NextResponse.json({ status: "completed", txSignature });
         }
       }
 
-      // Also check SOL transfer if token is SOL
-      let hasSolTransfer = false;
-      if (payment.token === "SOL" && expectedAmount) {
-        const postBalances = tx.meta?.postBalances || [];
-        const preBalances = tx.meta?.preBalances || [];
-        const merchantIdx = accounts.findIndex((a: any) => a.pubkey === payment.walletAddress);
-        if (merchantIdx >= 0) {
-          const received = (postBalances[merchantIdx] || 0) - (preBalances[merchantIdx] || 0);
-          if (received > 0) hasSolTransfer = true;
-        }
-      }
-
-      if (hasReference || hasTokenTransfer || hasSolTransfer) {
-        const paidBy = accounts[0]?.pubkey || "unknown";
-        await markPaymentComplete(slug, paidBy, sig.signature);
-
-
-        const merchant = await getMerchantData(payment.walletAddress);
-
-        // Push notification
-        if (merchant?.expoPushToken) {
-          await sendPushNotification(merchant.expoPushToken, payment.amount, payment.label);
-        } else {
-          try {
-            const userSnap = await getDoc(doc(db, "chatfi_users", payment.walletAddress));
-            const userData = userSnap.data();
-            if (userData?.expoPushToken) {
-              await sendPushNotification(userData.expoPushToken, payment.amount, payment.label);
+      // Also check nativeTransfers for SOL payments
+      if (payment.token === "SOL") {
+        const nativeTransfers = tx.nativeTransfers || [];
+        for (const transfer of nativeTransfers) {
+          if (
+            transfer.toUserAccount === payment.walletAddress &&
+            transfer.amount > 0
+          ) {
+            const txSignature = tx.signature;
+            const paidBy = tx.feePayer || "unknown";
+            await markPaymentComplete(slug, paidBy, txSignature);
+            const merchant = await getMerchantData(payment.walletAddress);
+            if (merchant?.expoPushToken) {
+              await sendPushNotification(merchant.expoPushToken, payment.amount, payment.label);
             }
-          } catch (e) {}
+            await updateMerchantStats(payment.walletAddress, payment.amount);
+            return NextResponse.json({ status: "completed", txSignature });
+          }
         }
-
-        // Fire webhook
-        if (merchant?.webhookUrl) {
-          await fireWebhook(merchant.webhookUrl, payment, sig.signature);
-        }
-
-        // Update merchant stats
-        await updateMerchantStats(payment.walletAddress, payment.amount);
-
-        return NextResponse.json({ status: "completed", txSignature: sig.signature });
       }
     }
 
