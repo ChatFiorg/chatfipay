@@ -15,6 +15,9 @@ import bs58 from "bs58";
 import { derivePaymentKeypair } from "./derivedWallet";
 
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+// Rent-exemption cost for a new SPL token account (paid by depositKeypair
+// when creating the merchant's ATA within this same transaction).
+const ATA_RENT_LAMPORTS = 2_039_280;
 
 export async function sweepPayment(
   paymentId: string,
@@ -45,7 +48,8 @@ export async function sweepPayment(
   const tx = new Transaction();
 
   const toAccount = await getAccount(connection, toAta).catch(() => null);
-  if (!toAccount) {
+  const needsAtaCreation = !toAccount;
+  if (needsAtaCreation) {
     tx.add(
       createAssociatedTokenAccountInstruction(
         depositKeypair.publicKey,
@@ -75,7 +79,9 @@ export async function sweepPayment(
 
       const feeCalc = await connection.getFeeForMessage(tx.compileMessage(), "confirmed");
       const fee = feeCalc?.value || 5000;
-      const reclaimable = currentBalance - fee;
+      // Must account for ATA rent paid out of this same balance, or the
+      // reclaim transfer over-commits and the whole tx fails.
+      const reclaimable = currentBalance - fee - (needsAtaCreation ? ATA_RENT_LAMPORTS : 0);
 
       if (reclaimable > 0) {
         tx.add(

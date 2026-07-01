@@ -8,12 +8,14 @@ import {
 import bs58 from "bs58";
 
 // Solana requires any account holding SOL to either be at 0 or above
-// the rent-exemption minimum (~890,880 lamports for a 0-byte account).
-// We fund just above that minimum, covering rent-exemption + the sweep
-// transaction's fee + ATA creation if needed. The reclaim step in
-// sweep.ts drains it back to exactly 0 afterward (zero balance is
-// always allowed, it's only small-nonzero that gets rejected).
-const FUNDING_AMOUNT_LAMPORTS = 1_000_000; // 0.001 SOL
+// the rent-exemption minimum. Creating the merchant's USDC associated
+// token account (if they don't already have one) costs ~2,039,280
+// lamports in rent-exemption alone — the previous 1,000,000 lamport
+// funding was well short of that and caused every first-time sweep to
+// fail with "insufficient lamports". We fund enough to cover ATA
+// creation + tx fee + margin. The reclaim step in sweep.ts drains any
+// leftover back to the treasury afterward.
+const FUNDING_AMOUNT_LAMPORTS = 2_200_000; // 0.0022 SOL
 
 export async function fundDepositAddress(depositAddress: string): Promise<string | null> {
   const rpcUrl = process.env.HELIUS_RPC_URL;
