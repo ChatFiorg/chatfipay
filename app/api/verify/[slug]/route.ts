@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPaymentRequest, markPaymentComplete } from "@/lib/payment";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db as adminDb } from "@/lib/firebaseAdmin";
 import { sweepPayment } from "@/lib/sweep";
 
 async function sendPushNotification(token: string, amount: number | null, label: string) {
@@ -136,7 +137,7 @@ export async function GET(
             // Store order: delegate to the canonical store webhook so CRM/stats/stock
             // logic runs the same way it does for NGN payments (fixes USDC orders never
             // updating Analytics/Customers).
-            await updateDoc(doc(db, "pay_links", slug), {
+            await adminDb.collection("pay_links").doc(slug).update({
               status: "completed",
               paidBy,
               txSignature,
@@ -202,7 +203,7 @@ export async function GET(
             const txSignature = tx.signature;
             const paidBy = tx.feePayer || "unknown";
             if (payment.storeOrder && payment.storeSlug && payment.orderId) {
-              await updateDoc(doc(db, "pay_links", slug), {
+              await adminDb.collection("pay_links").doc(slug).update({
                 status: "completed",
                 paidBy,
                 txSignature,
