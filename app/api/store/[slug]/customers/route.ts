@@ -18,8 +18,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
 
   try {
-    const snap = await db.collection("stores").doc(slug).collection("customers")
-      .orderBy("lastOrderAt", "desc").limit(200).get();
+    let snap;
+    try {
+      snap = await db.collection("stores").doc(slug).collection("customers")
+        .orderBy("lastOrderAt", "desc").limit(200).get();
+    } catch {
+      // Fallback without ordering if index not ready
+      snap = await db.collection("stores").doc(slug).collection("customers")
+        .limit(200).get();
+    }
 
     const customers = snap.docs.map(d => {
       const data = d.data();
