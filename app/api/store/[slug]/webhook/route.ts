@@ -91,14 +91,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       orders: FieldValue.increment(1),
     }, { merge: true });
 
-    // Support both the current multi-item `items` array and legacy single-product orders
-    const lineItems: { productId: string; quantity: number }[] = Array.isArray(order.items) && order.items.length > 0
-      ? order.items.map((it: any) => ({ productId: it.productId, quantity: it.quantity || 1 }))
-      : order.productId
-        ? [{ productId: order.productId, quantity: order.quantity || 1 }]
-        : [];
+    // Prefer the explicit stockDeductions computed at checkout (handles
+    // bundles, where stock lives on child products rather than the bundle
+    // itself). Falls back to the older `items`/`productId` derivation for
+    // orders created before this field existed, so nothing breaks.
+    const stockDeductions: { productId: string; quantity: number }[] =
+      Array.isArray(order.stockDeductions) && order.stockDeductions.length > 0
+        ? order.stockDeductions
+        : Array.isArray(order.items) && order.items.length > 0
+          ? order.items.map((it: any) => ({ productId: it.productId, quantity: it.quantity || 1 }))
+          : order.productId
+            ? [{ productId: order.productId, quantity: order.quantity || 1 }]
+            : [];
 
-    for (const item of lineItems) {
+    for (const item of stockDeductions) {
       if (!item.productId) continue;
       const productRef = db.collection("stores").doc(slug).collection("products").doc(item.productId);
       const productSnap = await productRef.get();

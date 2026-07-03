@@ -3,6 +3,7 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { applyDiscountCode } from "@/lib/discounts";
+import { resolveOrderPricing } from "@/lib/orderPricing";
 import { derivePaymentAddress } from "@/lib/derivedWallet";
 import { fundDepositAddress } from "@/lib/fundDeposit";
 
@@ -36,7 +37,8 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode } = body;
+    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode, selectedAddOns } = body;
+    const quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
 
     if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
 
@@ -50,7 +52,26 @@ export async function POST(
     const product = productSnap.data()!;
     if (!product.active) return NextResponse.json({ error: "Product unavailable" }, { status: 400 });
 
-    const discountResult = await applyDiscountCode(slug, discountCode, product.price);
+    const minOrderQty = product.minOrderQty || 1;
+    const maxOrderQty = product.maxOrderQty || Infinity;
+    if (quantity < minOrderQty) {
+      return NextResponse.json({ error: `Minimum order quantity for this product is ${minOrderQty}` }, { status: 400 });
+    }
+    if (quantity > maxOrderQty) {
+      return NextResponse.json({ error: `Maximum order quantity for this product is ${maxOrderQty}` }, { status: 400 });
+    }
+    if (product.type !== "bundle" && product.stock != null && quantity > product.stock) {
+      return NextResponse.json({ error: `Only ${product.stock} left in stock` }, { status: 400 });
+    }
+
+    const pricingResult = await resolveOrderPricing(slug, { ...product, id: productId }, quantity, selectedAddOns);
+    if ("error" in pricingResult) {
+      return NextResponse.json({ error: pricingResult.error }, { status: 400 });
+    }
+    const { unitPrice, addOnsSelected, stockDeductions } = pricingResult;
+
+    const subtotal = unitPrice * quantity;
+    const discountResult = await applyDiscountCode(slug, discountCode, subtotal);
     if ("error" in discountResult) {
       return NextResponse.json({ error: discountResult.error }, { status: 400 });
     }
@@ -78,7 +99,7 @@ export async function POST(
       merchantWallet: store.ownerWallet,
       amount: amountUsdc,
       token: "USDC",
-      label: `${product.name} x1`,
+      label: `${product.name} x${quantity}`,
       memo: `Order ${orderId} - ${store.name}`,
       status: "pending",
       storeOrder: true,
@@ -100,13 +121,18 @@ export async function POST(
       id: orderId,
       productId,
       productName: product.name,
+      quantity,
+      unitPrice,
+      basePrice: product.price,
+      addOns: addOnsSelected,
+      stockDeductions,
       buyerWallet: buyerWallet || null,
       buyerEmail: buyerEmail || null,
       buyerPhone: buyerPhone || null,
       buyerName: buyerName || null,
       buyerDelivery: buyerDelivery || null,
       amount: finalAmount,
-      originalAmount: product.price,
+      subtotal,
       discountCode: appliedDiscountCode,
       discountAmount,
       amountUsdc,
@@ -124,8 +150,12 @@ export async function POST(
       success: true,
       orderId,
       paymentLink: `https://pay.chatfi.pro/pay/${payLinkId}`,
+      quantity,
+      unitPrice,
+      basePrice: product.price,
+      addOns: addOnsSelected,
+      subtotal,
       amountNgn: finalAmount,
-      originalAmountNgn: product.price,
       discountAmount,
       discountCode: appliedDiscountCode,
       amountUsdc,
