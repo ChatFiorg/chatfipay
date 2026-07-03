@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { applyDiscountCode } from "@/lib/discounts";
 import { derivePaymentAddress } from "@/lib/derivedWallet";
 import { fundDepositAddress } from "@/lib/fundDeposit";
 
@@ -35,7 +36,7 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery } = body;
+    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode } = body;
 
     if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
 
@@ -49,8 +50,14 @@ export async function POST(
     const product = productSnap.data()!;
     if (!product.active) return NextResponse.json({ error: "Product unavailable" }, { status: 400 });
 
+    const discountResult = await applyDiscountCode(slug, discountCode, product.price);
+    if ("error" in discountResult) {
+      return NextResponse.json({ error: discountResult.error }, { status: 400 });
+    }
+    const { finalAmount, discountAmount, code: appliedDiscountCode } = discountResult;
+
     const ngnPerUsdc = await getNgnPerUsdc();
-    const amountUsdc = Math.round((product.price / ngnPerUsdc) * 100) / 100;
+    const amountUsdc = Math.round((finalAmount / ngnPerUsdc) * 100) / 100;
 
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
@@ -86,7 +93,7 @@ export async function POST(
       receivedAmount: null,
       buyerDelivery: buyerDelivery || null,
       ngnPerUsdc,
-      ngnAmount: product.price,
+      ngnAmount: finalAmount,
     });
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
@@ -98,7 +105,10 @@ export async function POST(
       buyerPhone: buyerPhone || null,
       buyerName: buyerName || null,
       buyerDelivery: buyerDelivery || null,
-      amount: product.price,
+      amount: finalAmount,
+      originalAmount: product.price,
+      discountCode: appliedDiscountCode,
+      discountAmount,
       amountUsdc,
       ngnPerUsdc,
       status: "pending",
@@ -114,7 +124,10 @@ export async function POST(
       success: true,
       orderId,
       paymentLink: `https://pay.chatfi.pro/pay/${payLinkId}`,
-      amountNgn: product.price,
+      amountNgn: finalAmount,
+      originalAmountNgn: product.price,
+      discountAmount,
+      discountCode: appliedDiscountCode,
       amountUsdc,
       ngnPerUsdc,
       product: product.name,

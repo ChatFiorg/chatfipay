@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { applyDiscountCode } from "@/lib/discounts";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
@@ -14,7 +15,7 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl } = body;
+    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode } = body;
 
     if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
     if (!buyerEmail) return NextResponse.json({ error: "Missing buyerEmail" }, { status: 400 });
@@ -47,10 +48,16 @@ export async function POST(
     }
     const subaccountCode = merchantSnap.data()!.paystackSubaccountCode;
 
+    const discountResult = await applyDiscountCode(slug, discountCode, product.price);
+    if ("error" in discountResult) {
+      return NextResponse.json({ error: discountResult.error }, { status: 400 });
+    }
+    const { finalAmount, discountAmount, code: appliedDiscountCode } = discountResult;
+
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
     const reference = `chatfi_${orderId}_${Date.now()}`;
-    const amountKobo = Math.round(product.price * 100);
+    const amountKobo = Math.round(finalAmount * 100);
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
       id: orderId,
@@ -61,7 +68,10 @@ export async function POST(
       buyerPhone: buyerPhone || null,
       buyerName: buyerName || null,
       buyerDelivery: buyerDelivery || null,
-      amount: product.price,
+      amount: finalAmount,
+      originalAmount: product.price,
+      discountCode: appliedDiscountCode,
+      discountAmount,
       paymentMethod: "naira",
       paystackRef: reference,
       status: "pending",
@@ -106,7 +116,10 @@ export async function POST(
       authorizationUrl: initData.data.authorization_url,
       accessCode: initData.data.access_code,
       reference,
-      amountNgn: product.price,
+      amountNgn: finalAmount,
+      originalAmountNgn: product.price,
+      discountAmount,
+      discountCode: appliedDiscountCode,
       product: product.name,
       status: "pending",
     });
