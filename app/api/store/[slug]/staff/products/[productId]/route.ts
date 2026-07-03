@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
-import { verifyStaffToken } from "@/lib/staffAuth";
+import { resolveStaffToken } from "@/lib/staffAuth";
 
 // DELETE /api/store/[slug]/staff/products/[productId] — Authorization: Bearer <staff token>
 // Requires permissions.products.
@@ -11,9 +11,9 @@ export async function DELETE(
   const { slug, productId } = await params;
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const payload = verifyStaffToken(token);
+  const payload = await resolveStaffToken(token, slug);
 
-  if (!payload || payload.slug !== slug) {
+  if (!payload) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!payload.permissions.products) {

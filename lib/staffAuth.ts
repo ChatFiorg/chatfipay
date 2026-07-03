@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { normalizeEmail } from "./buyerAuth";
+import { db } from "./firebaseAdmin";
 
 function base64url(input: Buffer): string {
   return input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -60,6 +61,35 @@ export function verifyStaffToken(token: string | null | undefined): StaffTokenPa
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
     if (typeof payload.permissions !== "object") return null;
     return payload;
+  } catch {
+    return null;
+  }
+}
+
+// Verifies the token signature/expiry, then checks Firestore to confirm
+// the staff doc still exists (not revoked) and returns *live* permissions
+// rather than whatever was baked into the token at login time. This makes
+// revocation and permission changes take effect immediately instead of
+// waiting up to 30 days for the token to expire.
+export async function resolveStaffToken(
+  token: string | null | undefined,
+  slug: string
+): Promise<StaffTokenPayload | null> {
+  const payload = verifyStaffToken(token);
+  if (!payload || payload.slug !== slug) return null;
+
+  try {
+    const snap = await db.collection("stores").doc(slug).collection("staff").doc(payload.email).get();
+    if (!snap.exists) return null; // revoked
+
+    const data = snap.data()!;
+    return {
+      ...payload,
+      permissions: {
+        orders: !!data.permissions?.orders,
+        products: !!data.permissions?.products,
+      },
+    };
   } catch {
     return null;
   }
