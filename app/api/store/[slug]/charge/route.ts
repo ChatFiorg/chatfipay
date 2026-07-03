@@ -39,6 +39,7 @@ export async function POST(
     const body = await req.json();
     const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode, selectedAddOns } = body;
     const quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
+    const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
 
     if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
 
@@ -46,6 +47,10 @@ export async function POST(
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const store = storeSnap.data()!;
     if (!store.live) return NextResponse.json({ error: "Store is offline" }, { status: 403 });
+
+    if (deliveryMethod === "pickup" && !store.shipping?.pickupEnabled) {
+      return NextResponse.json({ error: "Pickup is not available for this store" }, { status: 400 });
+    }
 
     const productSnap = await db.collection("stores").doc(slug).collection("products").doc(productId).get();
     if (!productSnap.exists) return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -75,7 +80,16 @@ export async function POST(
     if ("error" in discountResult) {
       return NextResponse.json({ error: discountResult.error }, { status: 400 });
     }
-    const { finalAmount, discountAmount, code: appliedDiscountCode } = discountResult;
+    const { finalAmount: discountedSubtotal, discountAmount, code: appliedDiscountCode } = discountResult;
+
+    const shippingConfig = store.shipping || { flatFee: 0, freeThreshold: null, pickupEnabled: false };
+    let shippingFee = 0;
+    if (deliveryMethod === "delivery") {
+      const freeThreshold = shippingConfig.freeThreshold;
+      shippingFee = freeThreshold != null && discountedSubtotal >= freeThreshold ? 0 : (shippingConfig.flatFee || 0);
+    }
+
+    const finalAmount = discountedSubtotal + shippingFee;
 
     const ngnPerUsdc = await getNgnPerUsdc();
     const amountUsdc = Math.round((finalAmount / ngnPerUsdc) * 100) / 100;
@@ -131,6 +145,8 @@ export async function POST(
       buyerPhone: buyerPhone || null,
       buyerName: buyerName || null,
       buyerDelivery: buyerDelivery || null,
+      deliveryMethod,
+      shippingFee,
       amount: finalAmount,
       subtotal,
       discountCode: appliedDiscountCode,
@@ -155,6 +171,8 @@ export async function POST(
       basePrice: product.price,
       addOns: addOnsSelected,
       subtotal,
+      deliveryMethod,
+      shippingFee,
       amountNgn: finalAmount,
       discountAmount,
       discountCode: appliedDiscountCode,
