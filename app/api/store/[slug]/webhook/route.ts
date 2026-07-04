@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import { settleLoyaltyForOrder } from "@/lib/loyalty";
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -120,6 +121,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       const update: any = { stock: FieldValue.increment(-Math.min(item.quantity, product.stock)), unitsSold: FieldValue.increment(item.quantity) };
       if (newStock === 0) update.active = false;
       await productRef.update(update);
+    }
+
+    // Settle loyalty points: credit points earned on this order, debit any
+    // points that were redeemed at checkout. No-op if loyalty isn't enabled
+    // or the buyer didn't provide an email.
+    try {
+      const storeSnap = await db.collection("stores").doc(slug).get();
+      const loyaltyConfig = storeSnap.exists ? storeSnap.data()!.loyalty : null;
+      await settleLoyaltyForOrder(slug, order.buyerEmail, order.amount || 0, order.pointsRedeemed || 0, loyaltyConfig);
+    } catch (e) {
+      console.error("Loyalty settlement failed (non-fatal):", e);
     }
 
     return NextResponse.json({ success: true, orderId, status: "paid" });

@@ -4,6 +4,8 @@ import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { applyDiscountCode } from "@/lib/discounts";
 import { resolveOrderPricing } from "@/lib/orderPricing";
+import { resolveLoyaltyRedemption } from "@/lib/loyalty";
+import { applyGiftCard } from "@/lib/giftCards";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
@@ -16,9 +18,10 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode, selectedAddOns } = body;
+    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode, selectedAddOns, buyerToken, giftCardCode } = body;
     const quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
     const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
+    const redeemPoints = Math.max(0, Math.floor(Number(body.redeemPoints) || 0));
 
     if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
     if (!buyerEmail) return NextResponse.json({ error: "Missing buyerEmail" }, { status: 400 });
@@ -80,19 +83,90 @@ export async function POST(
     }
     const { finalAmount: discountedSubtotal, discountAmount, code: appliedDiscountCode } = discountResult;
 
+    const loyaltyResult = await resolveLoyaltyRedemption(slug, store.loyalty, buyerToken, buyerEmail, redeemPoints, discountedSubtotal);
+    if ("error" in loyaltyResult) {
+      return NextResponse.json({ error: loyaltyResult.error }, { status: 400 });
+    }
+    const { redeemedPoints, redemptionValue } = loyaltyResult;
+
     const shippingConfig = store.shipping || { flatFee: 0, freeThreshold: null, pickupEnabled: false };
+    const subtotalAfterLoyalty = discountedSubtotal - redemptionValue;
     let shippingFee = 0;
     if (deliveryMethod === "delivery") {
       const freeThreshold = shippingConfig.freeThreshold;
-      shippingFee = freeThreshold != null && discountedSubtotal >= freeThreshold ? 0 : (shippingConfig.flatFee || 0);
+      shippingFee = freeThreshold != null && subtotalAfterLoyalty >= freeThreshold ? 0 : (shippingConfig.flatFee || 0);
     }
 
-    const finalAmount = discountedSubtotal + shippingFee;
+    const totalBeforeGiftCard = subtotalAfterLoyalty + shippingFee;
+    const giftCardResult = await applyGiftCard(slug, giftCardCode, totalBeforeGiftCard);
+    if ("error" in giftCardResult) {
+      return NextResponse.json({ error: giftCardResult.error }, { status: 400 });
+    }
+    const { code: appliedGiftCardCode, amountUsed: giftCardAmountUsed } = giftCardResult;
+
+    const finalAmount = Math.max(totalBeforeGiftCard - giftCardAmountUsed, 0);
 
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
     const reference = `chatfi_${orderId}_${Date.now()}`;
     const amountKobo = Math.round(finalAmount * 100);
+
+    // Paystack requires a positive amount — a fully gift-card-covered order
+    // can't be initialized as a normal transaction. Mark it paid directly.
+    if (amountKobo <= 0) {
+      await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
+        id: orderId,
+        productId,
+        productName: product.name,
+        quantity,
+        unitPrice,
+        basePrice: product.price,
+        addOns: addOnsSelected,
+        stockDeductions,
+        buyerWallet: buyerWallet || null,
+        buyerEmail,
+        buyerPhone: buyerPhone || null,
+        buyerName: buyerName || null,
+        buyerDelivery: buyerDelivery || null,
+        deliveryMethod,
+        shippingFee,
+        pointsRedeemed: redeemedPoints,
+        loyaltyDiscount: redemptionValue,
+        giftCardCode: appliedGiftCardCode,
+        giftCardAmountUsed,
+        amount: 0,
+        subtotal,
+        discountCode: appliedDiscountCode,
+        discountAmount,
+        paymentMethod: "giftcard",
+        status: "pending",
+        paymentStatus: "pending",
+        createdAt: now,
+        paidAt: null,
+      });
+
+      // Confirm immediately via the same webhook path used for real payments,
+      // so stock deduction, CRM, and loyalty earn logic all run identically.
+      await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      }).catch(e => console.error("Failed to auto-confirm zero-amount order:", e));
+
+      await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
+
+      return NextResponse.json({
+        success: true,
+        orderId,
+        fullyPaidByGiftCard: true,
+        quantity,
+        unitPrice,
+        giftCardAmountUsed,
+        amountNgn: 0,
+        product: product.name,
+        status: "paid",
+      });
+    }
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
       id: orderId,
@@ -110,6 +184,10 @@ export async function POST(
       buyerDelivery: buyerDelivery || null,
       deliveryMethod,
       shippingFee,
+      pointsRedeemed: redeemedPoints,
+      loyaltyDiscount: redemptionValue,
+      giftCardCode: appliedGiftCardCode,
+      giftCardAmountUsed,
       amount: finalAmount,
       subtotal,
       discountCode: appliedDiscountCode,
@@ -165,6 +243,9 @@ export async function POST(
       subtotal,
       deliveryMethod,
       shippingFee,
+      pointsRedeemed: redeemedPoints,
+      loyaltyDiscount: redemptionValue,
+      giftCardAmountUsed,
       amountNgn: finalAmount,
       discountAmount,
       discountCode: appliedDiscountCode,
