@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { username, ownerWallet, name, description, logo, banner, favicon, category, theme, contact, shipping, loyalty, analytics } = body;
+    const { username, ownerWallet, name, description, logo, banner, favicon, category, theme, contact, shipping, loyalty, analytics, countdownPromo } = body;
 
     if (!username || !ownerWallet) return NextResponse.json({ error: "Missing username or ownerWallet" }, { status: 400 });
 
@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
     setIfProvidedOrNew('shipping', shipping, { flatFee: 0, freeThreshold: null, pickupEnabled: false, pickupAddress: '' });
     setIfProvidedOrNew('loyalty', loyalty, { enabled: false, earnRate: 1, redeemValue: 1 });
     setIfProvidedOrNew('analytics', analytics, { gaId: '', fbPixelId: '' });
+    setIfProvidedOrNew('countdownPromo', countdownPromo, { enabled: false, message: '', endsAt: null });
 
     if (isNewStore) {
       storeUpdate.live = false;
