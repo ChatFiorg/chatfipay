@@ -1,4 +1,7 @@
 {
   "buildCommand": "next build --webpack",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    { "path": "/api/cron/abandoned-carts", "schedule": "0 9 * * *" }
+  ]
 }
