@@ -10,6 +10,16 @@ import { applyGiftCard } from "@/lib/giftCards";
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 
+interface ResolvedLine {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  basePrice: number;
+  addOns: { id: string; name: string; price: number }[];
+  stockDeductions: { productId: string; quantity: number }[];
+}
+
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ slug: string }> }
@@ -18,12 +28,22 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode, selectedAddOns, buyerToken, giftCardCode } = body;
-    const quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
+    const { buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode, buyerToken, giftCardCode } = body;
     const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
     const redeemPoints = Math.max(0, Math.floor(Number(body.redeemPoints) || 0));
 
-    if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
+    // Normalize both request shapes into one line-item list: the classic
+    // single-product body (productId/quantity/selectedAddOns) used by the
+    // "Clean" storefront template, and the cart body (items: [{productId,
+    // quantity}]) used by the Combo/MiniStore templates' multi-item cart.
+    const rawItems: { productId: string; quantity: number; selectedAddOns?: string[] }[] =
+      Array.isArray(body.items) && body.items.length > 0
+        ? body.items
+        : body.productId
+          ? [{ productId: body.productId, quantity: body.quantity, selectedAddOns: body.selectedAddOns }]
+          : [];
+
+    if (rawItems.length === 0) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
     if (!buyerEmail) return NextResponse.json({ error: "Missing buyerEmail" }, { status: 400 });
 
     if (!PAYSTACK_SECRET_KEY) {
@@ -40,23 +60,6 @@ export async function POST(
       return NextResponse.json({ error: "Pickup is not available for this store" }, { status: 400 });
     }
 
-    const productSnap = await db.collection("stores").doc(slug).collection("products").doc(productId).get();
-    if (!productSnap.exists) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    const product = productSnap.data()!;
-    if (!product.active) return NextResponse.json({ error: "Product unavailable" }, { status: 400 });
-
-    const minOrderQty = product.minOrderQty || 1;
-    const maxOrderQty = product.maxOrderQty || Infinity;
-    if (quantity < minOrderQty) {
-      return NextResponse.json({ error: `Minimum order quantity for this product is ${minOrderQty}` }, { status: 400 });
-    }
-    if (quantity > maxOrderQty) {
-      return NextResponse.json({ error: `Maximum order quantity for this product is ${maxOrderQty}` }, { status: 400 });
-    }
-    if (product.type !== "bundle" && product.stock != null && quantity > product.stock) {
-      return NextResponse.json({ error: `Only ${product.stock} left in stock` }, { status: 400 });
-    }
-
     if (!store.ownerWallet) {
       return NextResponse.json({ error: "Store has no owner wallet" }, { status: 400 });
     }
@@ -70,13 +73,49 @@ export async function POST(
     }
     const subaccountCode = merchantSnap.data()!.paystackSubaccountCode;
 
-    const pricingResult = await resolveOrderPricing(slug, { ...product, id: productId }, quantity, selectedAddOns);
-    if ("error" in pricingResult) {
-      return NextResponse.json({ error: pricingResult.error }, { status: 400 });
-    }
-    const { unitPrice, addOnsSelected, stockDeductions } = pricingResult;
+    // Resolve, validate, and price each line item independently (MoQ/MaxOQ,
+    // stock, bundles, add-ons all respected per line), then sum for the
+    // cart-wide subtotal.
+    const resolvedLines: ResolvedLine[] = [];
+    for (const raw of rawItems) {
+      const quantity = Math.max(1, Math.floor(Number(raw.quantity) || 1));
+      const productSnap = await db.collection("stores").doc(slug).collection("products").doc(raw.productId).get();
+      if (!productSnap.exists) return NextResponse.json({ error: "One of the products in your order was not found" }, { status: 404 });
+      const product = productSnap.data()!;
+      if (!product.active) return NextResponse.json({ error: `"${product.name}" is currently unavailable` }, { status: 400 });
 
-    const subtotal = unitPrice * quantity;
+      const minOrderQty = product.minOrderQty || 1;
+      const maxOrderQty = product.maxOrderQty || Infinity;
+      if (quantity < minOrderQty) {
+        return NextResponse.json({ error: `Minimum order quantity for "${product.name}" is ${minOrderQty}` }, { status: 400 });
+      }
+      if (quantity > maxOrderQty) {
+        return NextResponse.json({ error: `Maximum order quantity for "${product.name}" is ${maxOrderQty}` }, { status: 400 });
+      }
+      if (product.type !== "bundle" && product.stock != null && quantity > product.stock) {
+        return NextResponse.json({ error: `Only ${product.stock} of "${product.name}" left in stock` }, { status: 400 });
+      }
+
+      const pricingResult = await resolveOrderPricing(slug, { ...product, id: raw.productId }, quantity, raw.selectedAddOns);
+      if ("error" in pricingResult) {
+        return NextResponse.json({ error: pricingResult.error }, { status: 400 });
+      }
+
+      resolvedLines.push({
+        productId: raw.productId,
+        productName: product.name,
+        quantity,
+        unitPrice: pricingResult.unitPrice,
+        basePrice: product.price,
+        addOns: pricingResult.addOnsSelected,
+        stockDeductions: pricingResult.stockDeductions,
+      });
+    }
+
+    const subtotal = resolvedLines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
+    const combinedStockDeductions = resolvedLines.flatMap(line => line.stockDeductions);
+    const totalQuantity = resolvedLines.reduce((sum, line) => sum + line.quantity, 0);
+
     const discountResult = await applyDiscountCode(slug, discountCode, subtotal);
     if ("error" in discountResult) {
       return NextResponse.json({ error: discountResult.error }, { status: 400 });
@@ -111,72 +150,21 @@ export async function POST(
     const reference = `chatfi_${orderId}_${Date.now()}`;
     const amountKobo = Math.round(finalAmount * 100);
 
-    // Paystack requires a positive amount — a fully gift-card-covered order
-    // can't be initialized as a normal transaction. Mark it paid directly.
-    if (amountKobo <= 0) {
-      await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
-        id: orderId,
-        productId,
-        productName: product.name,
-        quantity,
-        unitPrice,
-        basePrice: product.price,
-        addOns: addOnsSelected,
-        stockDeductions,
-        buyerWallet: buyerWallet || null,
-        buyerEmail,
-        buyerPhone: buyerPhone || null,
-        buyerName: buyerName || null,
-        buyerDelivery: buyerDelivery || null,
-        deliveryMethod,
-        shippingFee,
-        pointsRedeemed: redeemedPoints,
-        loyaltyDiscount: redemptionValue,
-        giftCardCode: appliedGiftCardCode,
-        giftCardAmountUsed,
-        amount: 0,
-        subtotal,
-        discountCode: appliedDiscountCode,
-        discountAmount,
-        paymentMethod: "giftcard",
-        status: "pending",
-        paymentStatus: "pending",
-        createdAt: now,
-        paidAt: null,
-      });
+    // Top-level productName/quantity/unitPrice mirror the first line item
+    // (or a summary label for multi-item carts) so older code that reads
+    // those single fields (invoices, CSV export, abandoned-cart emails)
+    // still shows something sensible; `items` carries the full detail.
+    const summaryName = resolvedLines.length === 1
+      ? resolvedLines[0].productName
+      : `${resolvedLines[0].productName} +${resolvedLines.length - 1} more`;
 
-      // Confirm immediately via the same webhook path used for real payments,
-      // so stock deduction, CRM, and loyalty earn logic all run identically.
-      await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
-      }).catch(e => console.error("Failed to auto-confirm zero-amount order:", e));
-
-      await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
-
-      return NextResponse.json({
-        success: true,
-        orderId,
-        fullyPaidByGiftCard: true,
-        quantity,
-        unitPrice,
-        giftCardAmountUsed,
-        amountNgn: 0,
-        product: product.name,
-        status: "paid",
-      });
-    }
-
-    await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
+    const orderDoc = {
       id: orderId,
-      productId,
-      productName: product.name,
-      quantity,
-      unitPrice,
-      basePrice: product.price,
-      addOns: addOnsSelected,
-      stockDeductions,
+      items: resolvedLines,
+      productId: resolvedLines[0].productId,
+      productName: summaryName,
+      quantity: totalQuantity,
+      unitPrice: subtotal / totalQuantity,
       buyerWallet: buyerWallet || null,
       buyerEmail,
       buyerPhone: buyerPhone || null,
@@ -188,6 +176,7 @@ export async function POST(
       loyaltyDiscount: redemptionValue,
       giftCardCode: appliedGiftCardCode,
       giftCardAmountUsed,
+      stockDeductions: combinedStockDeductions,
       amount: finalAmount,
       subtotal,
       discountCode: appliedDiscountCode,
@@ -198,7 +187,23 @@ export async function POST(
       paymentStatus: "pending",
       createdAt: now,
       paidAt: null,
-    });
+    };
+
+    if (amountKobo <= 0) {
+      await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({ ...orderDoc, status: "pending", amount: 0 });
+      await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      }).catch(e => console.error("Failed to auto-confirm zero-amount order:", e));
+      await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
+      return NextResponse.json({
+        success: true, orderId, fullyPaidByGiftCard: true,
+        items: resolvedLines, giftCardAmountUsed, amountNgn: 0, status: "paid",
+      });
+    }
+
+    await db.collection("stores").doc(slug).collection("orders").doc(orderId).set(orderDoc);
 
     const initRes = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
       method: "POST",
@@ -212,7 +217,7 @@ export async function POST(
         reference,
         subaccount: subaccountCode,
         callback_url: callbackUrl || undefined,
-        metadata: { slug, orderId, productId, quantity },
+        metadata: { slug, orderId },
       }),
     });
     const initData = await initRes.json();
@@ -236,10 +241,7 @@ export async function POST(
       authorizationUrl: initData.data.authorization_url,
       accessCode: initData.data.access_code,
       reference,
-      quantity,
-      unitPrice,
-      basePrice: product.price,
-      addOns: addOnsSelected,
+      items: resolvedLines,
       subtotal,
       deliveryMethod,
       shippingFee,
@@ -249,7 +251,6 @@ export async function POST(
       amountNgn: finalAmount,
       discountAmount,
       discountCode: appliedDiscountCode,
-      product: product.name,
       status: "pending",
     });
     response.headers.set("Access-Control-Allow-Origin", "*");

@@ -9,6 +9,16 @@ import { applyGiftCard } from "@/lib/giftCards";
 import { derivePaymentAddress } from "@/lib/derivedWallet";
 import { fundDepositAddress } from "@/lib/fundDeposit";
 
+interface ResolvedLine {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  basePrice: number;
+  addOns: { id: string; name: string; price: number }[];
+  stockDeductions: { productId: string; quantity: number }[];
+}
+
 async function getNgnPerUsdc(): Promise<number> {
   try {
     const fxRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
@@ -39,12 +49,18 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode, selectedAddOns, buyerToken, giftCardCode } = body;
-    const quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
+    const { buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode, buyerToken, giftCardCode } = body;
     const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
     const redeemPoints = Math.max(0, Math.floor(Number(body.redeemPoints) || 0));
 
-    if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
+    const rawItems: { productId: string; quantity: number; selectedAddOns?: string[] }[] =
+      Array.isArray(body.items) && body.items.length > 0
+        ? body.items
+        : body.productId
+          ? [{ productId: body.productId, quantity: body.quantity, selectedAddOns: body.selectedAddOns }]
+          : [];
+
+    if (rawItems.length === 0) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
 
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
@@ -55,30 +71,46 @@ export async function POST(
       return NextResponse.json({ error: "Pickup is not available for this store" }, { status: 400 });
     }
 
-    const productSnap = await db.collection("stores").doc(slug).collection("products").doc(productId).get();
-    if (!productSnap.exists) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    const product = productSnap.data()!;
-    if (!product.active) return NextResponse.json({ error: "Product unavailable" }, { status: 400 });
+    const resolvedLines: ResolvedLine[] = [];
+    for (const raw of rawItems) {
+      const quantity = Math.max(1, Math.floor(Number(raw.quantity) || 1));
+      const productSnap = await db.collection("stores").doc(slug).collection("products").doc(raw.productId).get();
+      if (!productSnap.exists) return NextResponse.json({ error: "One of the products in your order was not found" }, { status: 404 });
+      const product = productSnap.data()!;
+      if (!product.active) return NextResponse.json({ error: `"${product.name}" is currently unavailable` }, { status: 400 });
 
-    const minOrderQty = product.minOrderQty || 1;
-    const maxOrderQty = product.maxOrderQty || Infinity;
-    if (quantity < minOrderQty) {
-      return NextResponse.json({ error: `Minimum order quantity for this product is ${minOrderQty}` }, { status: 400 });
-    }
-    if (quantity > maxOrderQty) {
-      return NextResponse.json({ error: `Maximum order quantity for this product is ${maxOrderQty}` }, { status: 400 });
-    }
-    if (product.type !== "bundle" && product.stock != null && quantity > product.stock) {
-      return NextResponse.json({ error: `Only ${product.stock} left in stock` }, { status: 400 });
+      const minOrderQty = product.minOrderQty || 1;
+      const maxOrderQty = product.maxOrderQty || Infinity;
+      if (quantity < minOrderQty) {
+        return NextResponse.json({ error: `Minimum order quantity for "${product.name}" is ${minOrderQty}` }, { status: 400 });
+      }
+      if (quantity > maxOrderQty) {
+        return NextResponse.json({ error: `Maximum order quantity for "${product.name}" is ${maxOrderQty}` }, { status: 400 });
+      }
+      if (product.type !== "bundle" && product.stock != null && quantity > product.stock) {
+        return NextResponse.json({ error: `Only ${product.stock} of "${product.name}" left in stock` }, { status: 400 });
+      }
+
+      const pricingResult = await resolveOrderPricing(slug, { ...product, id: raw.productId }, quantity, raw.selectedAddOns);
+      if ("error" in pricingResult) {
+        return NextResponse.json({ error: pricingResult.error }, { status: 400 });
+      }
+
+      resolvedLines.push({
+        productId: raw.productId,
+        productName: product.name,
+        quantity,
+        unitPrice: pricingResult.unitPrice,
+        basePrice: product.price,
+        addOns: pricingResult.addOnsSelected,
+        stockDeductions: pricingResult.stockDeductions,
+      });
     }
 
-    const pricingResult = await resolveOrderPricing(slug, { ...product, id: productId }, quantity, selectedAddOns);
-    if ("error" in pricingResult) {
-      return NextResponse.json({ error: pricingResult.error }, { status: 400 });
-    }
-    const { unitPrice, addOnsSelected, stockDeductions } = pricingResult;
+    const subtotal = resolvedLines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
+    const combinedStockDeductions = resolvedLines.flatMap(line => line.stockDeductions);
+    const totalQuantity = resolvedLines.reduce((sum, line) => sum + line.quantity, 0);
 
-    const subtotal = unitPrice * quantity;
     const discountResult = await applyDiscountCode(slug, discountCode, subtotal);
     if ("error" in discountResult) {
       return NextResponse.json({ error: discountResult.error }, { status: 400 });
@@ -111,19 +143,18 @@ export async function POST(
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
 
-    // Fully covered by gift card — no crypto payment needed at all. Mark
-    // paid directly and route through the webhook so stock/CRM/loyalty
-    // settle exactly as they would for a real payment.
+    const summaryName = resolvedLines.length === 1
+      ? resolvedLines[0].productName
+      : `${resolvedLines[0].productName} +${resolvedLines.length - 1} more`;
+
     if (finalAmount <= 0) {
       await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
         id: orderId,
-        productId,
-        productName: product.name,
-        quantity,
-        unitPrice,
-        basePrice: product.price,
-        addOns: addOnsSelected,
-        stockDeductions,
+        items: resolvedLines,
+        productId: resolvedLines[0].productId,
+        productName: summaryName,
+        quantity: totalQuantity,
+        unitPrice: subtotal / totalQuantity,
         buyerWallet: buyerWallet || null,
         buyerEmail: buyerEmail || null,
         buyerPhone: buyerPhone || null,
@@ -135,6 +166,7 @@ export async function POST(
         loyaltyDiscount: redemptionValue,
         giftCardCode: appliedGiftCardCode,
         giftCardAmountUsed,
+        stockDeductions: combinedStockDeductions,
         amount: 0,
         subtotal,
         discountCode: appliedDiscountCode,
@@ -154,15 +186,8 @@ export async function POST(
       await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
 
       return NextResponse.json({
-        success: true,
-        orderId,
-        fullyPaidByGiftCard: true,
-        quantity,
-        unitPrice,
-        giftCardAmountUsed,
-        amountNgn: 0,
-        product: product.name,
-        status: "paid",
+        success: true, orderId, fullyPaidByGiftCard: true,
+        items: resolvedLines, giftCardAmountUsed, amountNgn: 0, status: "paid",
       });
     }
 
@@ -186,7 +211,7 @@ export async function POST(
       merchantWallet: store.ownerWallet,
       amount: amountUsdc,
       token: "USDC",
-      label: `${product.name} x${quantity}`,
+      label: `${summaryName} x${totalQuantity}`,
       memo: `Order ${orderId} - ${store.name}`,
       status: "pending",
       storeOrder: true,
@@ -206,13 +231,11 @@ export async function POST(
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
       id: orderId,
-      productId,
-      productName: product.name,
-      quantity,
-      unitPrice,
-      basePrice: product.price,
-      addOns: addOnsSelected,
-      stockDeductions,
+      items: resolvedLines,
+      productId: resolvedLines[0].productId,
+      productName: summaryName,
+      quantity: totalQuantity,
+      unitPrice: subtotal / totalQuantity,
       buyerWallet: buyerWallet || null,
       buyerEmail: buyerEmail || null,
       buyerPhone: buyerPhone || null,
@@ -224,6 +247,7 @@ export async function POST(
       loyaltyDiscount: redemptionValue,
       giftCardCode: appliedGiftCardCode,
       giftCardAmountUsed,
+      stockDeductions: combinedStockDeductions,
       amount: finalAmount,
       subtotal,
       discountCode: appliedDiscountCode,
@@ -243,10 +267,7 @@ export async function POST(
       success: true,
       orderId,
       paymentLink: `https://pay.chatfi.pro/pay/${payLinkId}`,
-      quantity,
-      unitPrice,
-      basePrice: product.price,
-      addOns: addOnsSelected,
+      items: resolvedLines,
       subtotal,
       deliveryMethod,
       shippingFee,
@@ -258,7 +279,6 @@ export async function POST(
       discountCode: appliedDiscountCode,
       amountUsdc,
       ngnPerUsdc,
-      product: product.name,
       status: "pending",
       expiresAt: expiresAt.toDate().toISOString(),
     });
