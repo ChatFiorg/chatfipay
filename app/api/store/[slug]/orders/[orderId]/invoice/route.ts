@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
-import PDFDocument from "pdfkit";
 
 async function getStoreByApiKey(apiKey: string | null, slug: string) {
   if (!apiKey) return null;
@@ -12,102 +11,117 @@ async function getStoreByApiKey(apiKey: string | null, slug: string) {
 }
 
 function formatNgn(n: number | undefined | null): string {
-  return `NGN ${Number(n || 0).toLocaleString()}`;
+  return `₦${Number(n || 0).toLocaleString()}`;
 }
 
-function generateInvoicePdf(store: any, order: any, orderId: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
-    const chunks: Buffer[] = [];
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+function generateInvoiceHtml(store: any, order: any, orderId: string): string {
+  const date = order.createdAt?.toDate?.()?.toLocaleDateString?.("en-NG") || new Date().toLocaleDateString("en-NG");
+  const qty = order.quantity || 1;
+  const unitPrice = order.unitPrice ?? order.amount;
+  const total = unitPrice * qty;
 
-    // Header
-    doc.fontSize(20).font("Helvetica-Bold").text(store.name || store.username, 50, 50);
-    doc.fontSize(10).font("Helvetica").fillColor("#666")
-      .text(`${store.username}.chatfi.pro`, 50, 75);
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice - ${orderId}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+  .page { background: #fff; max-width: 600px; margin: 0 auto; padding: 40px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #f0f0f0; }
+  .store-name { font-size: 22px; font-weight: 800; color: #111; }
+  .store-url { font-size: 12px; color: #999; margin-top: 4px; }
+  .invoice-label { font-size: 28px; font-weight: 800; color: #111; text-align: right; }
+  .invoice-meta { font-size: 12px; color: #666; text-align: right; margin-top: 4px; line-height: 1.6; }
+  .section { margin-bottom: 24px; }
+  .section-title { font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .bill-info { font-size: 13px; color: #333; line-height: 1.7; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th { font-size: 11px; color: #999; font-weight: 600; text-transform: uppercase; padding: 8px 0; border-bottom: 1px solid #eee; text-align: left; }
+  th:last-child, td:last-child { text-align: right; }
+  td { font-size: 13px; color: #333; padding: 12px 0; border-bottom: 1px solid #f5f5f5; }
+  .totals { margin-left: auto; width: 240px; }
+  .total-row { display: flex; justify-content: space-between; font-size: 13px; color: #666; padding: 4px 0; }
+  .total-row.final { font-size: 15px; font-weight: 800; color: #111; border-top: 2px solid #111; margin-top: 8px; padding-top: 8px; }
+  .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${order.status === 'paid' ? '#e8f5e9' : '#fff3e0'}; color: ${order.status === 'paid' ? '#2e7d32' : '#e65100'}; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #f0f0f0; text-align: center; font-size: 11px; color: #bbb; }
+  @media print { body { background: #fff; padding: 0; } .page { box-shadow: none; border-radius: 0; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="store-name">${store.name || store.username}</div>
+      <div class="store-url">${store.username}.chatfi.pro</div>
+    </div>
+    <div>
+      <div class="invoice-label">Invoice</div>
+      <div class="invoice-meta">
+        #${orderId.slice(0, 12)}<br>
+        ${date}<br>
+        <span class="status-badge">${order.status || 'pending'}</span>
+      </div>
+    </div>
+  </div>
 
-    doc.fontSize(16).font("Helvetica-Bold").fillColor("#000")
-      .text("INVOICE", 400, 50, { align: "right" });
-    doc.fontSize(9).font("Helvetica").fillColor("#666")
-      .text(`Order ID: ${orderId}`, 400, 72, { align: "right" })
-      .text(`Date: ${order.createdAt?.toDate?.()?.toLocaleDateString?.("en-NG") || ""}`, 400, 85, { align: "right" })
-      .text(`Status: ${(order.status || "").toUpperCase()}`, 400, 98, { align: "right" });
+  <div class="section">
+    <div class="section-title">Bill To</div>
+    <div class="bill-info">
+      ${order.buyerName || 'N/A'}<br>
+      ${order.buyerPhone ? order.buyerPhone + '<br>' : ''}
+      ${order.buyerEmail ? order.buyerEmail + '<br>' : ''}
+      ${order.buyerDelivery || order.buyerAddress || ''}
+    </div>
+  </div>
 
-    doc.moveTo(50, 120).lineTo(545, 120).strokeColor("#ddd").stroke();
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Qty</th>
+        <th>Unit Price</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${order.productName || 'Product'}</td>
+        <td>${qty}</td>
+        <td>${formatNgn(unitPrice)}</td>
+        <td>${formatNgn(total)}</td>
+      </tr>
+      ${Array.isArray(order.addOns) ? order.addOns.map((a: any) => `
+      <tr>
+        <td style="font-size:12px;color:#666">+ ${a.name}</td>
+        <td>${qty}</td>
+        <td>${formatNgn(a.price)}</td>
+        <td>${formatNgn(a.price * qty)}</td>
+      </tr>`).join('') : ''}
+    </tbody>
+  </table>
 
-    // Bill to
-    doc.fontSize(11).font("Helvetica-Bold").fillColor("#000").text("Bill To", 50, 135);
-    doc.fontSize(10).font("Helvetica").fillColor("#333")
-      .text(order.buyerName || "N/A", 50, 152)
-      .text(order.buyerPhone || "", 50, 166)
-      .text(order.buyerEmail || "", 50, 180)
-      .text(order.buyerDelivery || order.buyerAddress || "", 50, 194, { width: 300 });
+  <div class="totals">
+    <div class="total-row"><span>Subtotal</span><span>${formatNgn(order.subtotal || total)}</span></div>
+    ${order.shippingFee ? `<div class="total-row"><span>${order.deliveryMethod === 'pickup' ? 'Pickup' : 'Shipping'}</span><span>${formatNgn(order.shippingFee)}</span></div>` : ''}
+    ${order.discountAmount ? `<div class="total-row"><span>Discount${order.discountCode ? ` (${order.discountCode})` : ''}</span><span>-${formatNgn(order.discountAmount)}</span></div>` : ''}
+    ${order.loyaltyDiscount ? `<div class="total-row"><span>Loyalty points</span><span>-${formatNgn(order.loyaltyDiscount)}</span></div>` : ''}
+    <div class="total-row final"><span>Total Paid</span><span>${formatNgn(order.amount)}</span></div>
+  </div>
 
-    // Line item table
-    let y = 240;
-    doc.fontSize(10).font("Helvetica-Bold").fillColor("#000");
-    doc.text("Item", 50, y);
-    doc.text("Qty", 350, y, { width: 50, align: "right" });
-    doc.text("Unit Price", 400, y, { width: 70, align: "right" });
-    doc.text("Total", 475, y, { width: 70, align: "right" });
-    y += 15;
-    doc.moveTo(50, y).lineTo(545, y).strokeColor("#ddd").stroke();
-    y += 10;
-
-    doc.font("Helvetica").fillColor("#333");
-    const qty = order.quantity || 1;
-    const unitPrice = order.unitPrice ?? order.amount;
-    doc.text(order.productName || "Product", 50, y, { width: 280 });
-    doc.text(String(qty), 350, y, { width: 50, align: "right" });
-    doc.text(formatNgn(unitPrice), 400, y, { width: 70, align: "right" });
-    doc.text(formatNgn(unitPrice * qty), 475, y, { width: 70, align: "right" });
-    y += 20;
-
-    if (Array.isArray(order.addOns) && order.addOns.length > 0) {
-      for (const addOn of order.addOns) {
-        doc.fontSize(9).fillColor("#666").text(`+ ${addOn.name}`, 60, y, { width: 270 });
-        doc.text(formatNgn(addOn.price), 400, y, { width: 70, align: "right" });
-        doc.text(formatNgn(addOn.price * qty), 475, y, { width: 70, align: "right" });
-        y += 15;
-      }
-    }
-
-    y += 10;
-    doc.moveTo(300, y).lineTo(545, y).strokeColor("#ddd").stroke();
-    y += 12;
-
-    const summaryRow = (label: string, value: string, bold = false) => {
-      doc.fontSize(10).font(bold ? "Helvetica-Bold" : "Helvetica").fillColor(bold ? "#000" : "#666");
-      doc.text(label, 350, y, { width: 120, align: "right" });
-      doc.text(value, 475, y, { width: 70, align: "right" });
-      y += 16;
-    };
-
-    summaryRow("Subtotal", formatNgn(order.subtotal));
-    if (order.discountAmount) summaryRow(`Discount${order.discountCode ? ` (${order.discountCode})` : ""}`, `-${formatNgn(order.discountAmount)}`);
-    if (order.loyaltyDiscount) summaryRow("Loyalty points redeemed", `-${formatNgn(order.loyaltyDiscount)}`);
-    if (order.giftCardAmountUsed) summaryRow(`Gift card${order.giftCardCode ? ` (${order.giftCardCode})` : ""}`, `-${formatNgn(order.giftCardAmountUsed)}`);
-    if (order.shippingFee) summaryRow(order.deliveryMethod === "pickup" ? "Pickup" : "Shipping", formatNgn(order.shippingFee));
-    y += 4;
-    doc.moveTo(350, y).lineTo(545, y).strokeColor("#000").stroke();
-    y += 10;
-    summaryRow("Total Paid", formatNgn(order.amount), true);
-
-    doc.fontSize(8).fillColor("#999").text("Powered by ChatFi", 50, 760, { align: "center", width: 495 });
-
-    doc.end();
-  });
+  <div class="footer">Powered by ChatFi · chatfi.pro</div>
+</div>
+</body>
+</html>`;
 }
 
-// GET /api/store/[slug]/orders/[orderId]/invoice — owner only (x-api-key)
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; orderId: string }> }
 ) {
   const { slug, orderId } = await params;
-  const apiKey = req.headers.get("x-api-key");
+  const apiKey = req.headers.get("x-api-key") || req.nextUrl.searchParams.get("key");
   const storeKey = await getStoreByApiKey(apiKey, slug);
   if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
 
@@ -120,13 +134,13 @@ export async function GET(
     if (!orderSnap.exists) return NextResponse.json({ error: "Order not found" }, { status: 404 });
     const order = orderSnap.data()!;
 
-    const pdfBuffer = await generateInvoicePdf(store, order, orderId);
+    const html = generateInvoiceHtml(store, order, orderId);
 
-    return new NextResponse(new Uint8Array(pdfBuffer), {
+    return new NextResponse(html, {
       status: 200,
       headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="invoice-${orderId}.pdf"`,
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Disposition": `inline; filename="invoice-${orderId}.html"`,
       },
     });
   } catch (e: any) {
