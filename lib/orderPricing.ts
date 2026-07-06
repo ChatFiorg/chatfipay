@@ -3,6 +3,7 @@ import { db } from "./firebaseAdmin";
 export interface StockDeduction {
   productId: string;
   quantity: number;
+  variantKey?: string;
 }
 
 export interface SelectedAddOn {
@@ -26,7 +27,8 @@ export async function resolveOrderPricing(
   slug: string,
   product: any,
   quantity: number,
-  selectedAddOnIds: string[] | undefined
+  selectedAddOnIds: string[] | undefined,
+  selectedVariant?: string
 ): Promise<OrderPricingResult | { error: string }> {
   const availableAddOns: any[] = Array.isArray(product.addOns) ? product.addOns : [];
   const requestedIds = Array.isArray(selectedAddOnIds) ? selectedAddOnIds : [];
@@ -35,9 +37,28 @@ export async function resolveOrderPricing(
     .map(a => ({ id: a.id, name: a.name, price: Number(a.price) || 0 }));
 
   const addOnsUnitPrice = addOnsSelected.reduce((sum, a) => sum + a.price, 0);
-  const unitPrice = Number(product.price) + addOnsUnitPrice;
+  let unitPrice = Number(product.price) + addOnsUnitPrice;
 
   const stockDeductions: StockDeduction[] = [];
+
+  let variantKeyResolved: string | undefined = undefined;
+  if (Array.isArray(product.variantGroups) && product.variantGroups.length > 0) {
+    if (!selectedVariant) {
+      return { error: "Please select an option before ordering" };
+    }
+    const variantStock = product.variantStock || {};
+    const combo = variantStock[selectedVariant];
+    if (!combo) {
+      return { error: "Selected option is not available" };
+    }
+    if (combo.stock != null && combo.stock < quantity) {
+      return { error: `Not enough stock for "${selectedVariant}"` };
+    }
+    if (combo.priceOverride != null) {
+      unitPrice = Number(combo.priceOverride) + addOnsUnitPrice;
+    }
+    variantKeyResolved = selectedVariant;
+  }
 
   if (product.type === "bundle" && Array.isArray(product.bundleItems) && product.bundleItems.length > 0) {
     for (const item of product.bundleItems) {
@@ -56,7 +77,7 @@ export async function resolveOrderPricing(
       stockDeductions.push({ productId: item.productId, quantity: needed });
     }
   } else {
-    stockDeductions.push({ productId: product.id, quantity });
+    stockDeductions.push({ productId: product.id, quantity, variantKey: variantKeyResolved });
   }
 
   return { unitPrice, addOnsSelected, stockDeductions };

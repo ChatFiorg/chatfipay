@@ -16,7 +16,8 @@ interface ResolvedLine {
   unitPrice: number;
   basePrice: number;
   addOns: { id: string; name: string; price: number }[];
-  stockDeductions: { productId: string; quantity: number }[];
+  stockDeductions: { productId: string; quantity: number; variantKey?: string }[];
+  selectedVariant: string | null;
 }
 
 async function getNgnPerUsdc(): Promise<number> {
@@ -53,11 +54,11 @@ export async function POST(
     const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
     const redeemPoints = Math.max(0, Math.floor(Number(body.redeemPoints) || 0));
 
-    const rawItems: { productId: string; quantity: number; selectedAddOns?: string[] }[] =
+    const rawItems: { productId: string; quantity: number; selectedAddOns?: string[]; selectedVariant?: string }[] =
       Array.isArray(body.items) && body.items.length > 0
         ? body.items
         : body.productId
-          ? [{ productId: body.productId, quantity: body.quantity, selectedAddOns: body.selectedAddOns }]
+          ? [{ productId: body.productId, quantity: body.quantity, selectedAddOns: body.selectedAddOns, selectedVariant: body.selectedVariant }]
           : [];
 
     if (rawItems.length === 0) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
@@ -87,11 +88,12 @@ export async function POST(
       if (quantity > maxOrderQty) {
         return NextResponse.json({ error: `Maximum order quantity for "${product.name}" is ${maxOrderQty}` }, { status: 400 });
       }
-      if (product.type !== "bundle" && product.stock != null && quantity > product.stock) {
+      const hasVariants = Array.isArray(product.variantGroups) && product.variantGroups.length > 0;
+      if (!hasVariants && product.type !== "bundle" && product.stock != null && quantity > product.stock) {
         return NextResponse.json({ error: `Only ${product.stock} of "${product.name}" left in stock` }, { status: 400 });
       }
 
-      const pricingResult = await resolveOrderPricing(slug, { ...product, id: raw.productId }, quantity, raw.selectedAddOns);
+      const pricingResult = await resolveOrderPricing(slug, { ...product, id: raw.productId }, quantity, raw.selectedAddOns, raw.selectedVariant);
       if ("error" in pricingResult) {
         return NextResponse.json({ error: pricingResult.error }, { status: 400 });
       }
@@ -104,6 +106,7 @@ export async function POST(
         basePrice: product.price,
         addOns: pricingResult.addOnsSelected,
         stockDeductions: pricingResult.stockDeductions,
+        selectedVariant: raw.selectedVariant || null,
       });
     }
 

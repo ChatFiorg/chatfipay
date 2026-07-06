@@ -96,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     // bundles, where stock lives on child products rather than the bundle
     // itself). Falls back to the older `items`/`productId` derivation for
     // orders created before this field existed, so nothing breaks.
-    const stockDeductions: { productId: string; quantity: number }[] =
+    const stockDeductions: { productId: string; quantity: number; variantKey?: string }[] =
       Array.isArray(order.stockDeductions) && order.stockDeductions.length > 0
         ? order.stockDeductions
         : Array.isArray(order.items) && order.items.length > 0
@@ -112,6 +112,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       if (!productSnap.exists) continue;
 
       const product = productSnap.data()!;
+
+      // Variant stock lives in a nested map keyed by combo (e.g. "Black / S"),
+      // not the product's top-level `stock` field. Read-modify-write the whole
+      // map rather than a dotted field path, since combo keys are free text
+      // and could contain characters that break Firestore path syntax.
+      if (item.variantKey && product.variantStock && product.variantStock[item.variantKey]) {
+        const combo = product.variantStock[item.variantKey];
+        const update: any = { unitsSold: FieldValue.increment(item.quantity) };
+        if (combo.stock != null) {
+          const newComboStock = Math.max(0, combo.stock - item.quantity);
+          update.variantStock = { ...product.variantStock, [item.variantKey]: { ...combo, stock: newComboStock } };
+        }
+        await productRef.update(update);
+        continue;
+      }
+
       if (product.stock == null) {
         await productRef.update({ unitsSold: FieldValue.increment(item.quantity) });
         continue; // unlimited stock, nothing to deduct
