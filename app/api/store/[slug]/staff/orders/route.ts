@@ -1,20 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { resolveStaffToken } from "@/lib/staffAuth";
+import { verifyOwnerToken } from "@/lib/ownerAuth";
 
-// GET /api/store/[slug]/staff/orders — Authorization: Bearer <staff token>
-// Requires permissions.orders.
+// Confirms the given owner token's ownerId actually owns the given slug, by
+// checking the storeWallets/storeEmails doc's usernames array.
+async function ownerOwnsStore(token: string | null, slug: string): Promise<boolean> {
+  const ownerPayload = verifyOwnerToken(token);
+  if (!ownerPayload) return false;
+  const [kind, identifier] = ownerPayload.ownerId.split(/:(.+)/);
+  const collection = kind === "wallet" ? "storeWallets" : "storeEmails";
+  const snap = await db.collection(collection).doc(identifier).get();
+  if (!snap.exists) return false;
+  const usernames: string[] = snap.data()?.usernames || [];
+  return usernames.includes(slug);
+}
+
+// GET /api/store/[slug]/staff/orders — Authorization: Bearer <staff token OR owner token>
+// Staff tokens need permissions.orders; owner tokens get full access if they own the store.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const payload = await resolveStaffToken(token, slug);
+  const staffPayload = await resolveStaffToken(token, slug);
 
-  if (!payload) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!payload.permissions.orders) {
-    return NextResponse.json({ error: "You don\'t have permission to view orders" }, { status: 403 });
+  if (staffPayload) {
+    if (!staffPayload.permissions.orders) {
+      return NextResponse.json({ error: "You don't have permission to view orders" }, { status: 403 });
+    }
+  } else {
+    const isOwner = await ownerOwnsStore(token, slug);
+    if (!isOwner) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   try {
