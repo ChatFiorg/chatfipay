@@ -20,6 +20,31 @@ function generateInvoiceHtml(store: any, order: any, orderId: string): string {
   const unitPrice = order.unitPrice ?? order.amount;
   const total = unitPrice * qty;
 
+  const invoiceItems = Array.isArray(order.items) && order.items.length > 0
+    ? order.items
+    : [{ productName: order.productName || 'Product', quantity: qty, unitPrice, addOns: order.addOns, selectedVariant: order.selectedVariant }];
+
+  const itemRowsHtml = invoiceItems.map((item: any) => {
+    const itemQty = item.quantity ?? 1;
+    const itemUnitPrice = item.unitPrice ?? 0;
+    const itemTotal = itemUnitPrice * itemQty;
+    const nameLabel = item.selectedVariant ? `${item.productName || 'Product'} (${item.selectedVariant})` : (item.productName || 'Product');
+    const addOnRows = Array.isArray(item.addOns) ? item.addOns.map((a: any) => `
+        <tr>
+          <td style="font-size:12px;color:#666">+ ${a.name}</td>
+          <td>${itemQty}</td>
+          <td>${formatNgn(a.price)}</td>
+          <td>${formatNgn(a.price * itemQty)}</td>
+        </tr>`).join('') : '';
+    return `
+        <tr>
+          <td>${nameLabel}</td>
+          <td>${itemQty}</td>
+          <td>${formatNgn(itemUnitPrice)}</td>
+          <td>${formatNgn(itemTotal)}</td>
+        </tr>${addOnRows}`;
+  }).join('');
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -86,20 +111,8 @@ function generateInvoiceHtml(store: any, order: any, orderId: string): string {
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td>${order.productName || 'Product'}</td>
-        <td>${qty}</td>
-        <td>${formatNgn(unitPrice)}</td>
-        <td>${formatNgn(total)}</td>
-      </tr>
-      ${Array.isArray(order.addOns) ? order.addOns.map((a: any) => `
-      <tr>
-        <td style="font-size:12px;color:#666">+ ${a.name}</td>
-        <td>${qty}</td>
-        <td>${formatNgn(a.price)}</td>
-        <td>${formatNgn(a.price * qty)}</td>
-      </tr>`).join('') : ''}
-    </tbody>
+        ${itemRowsHtml}
+      </tbody>
   </table>
 
   <div class="totals">

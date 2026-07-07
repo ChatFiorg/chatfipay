@@ -31,14 +31,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     ];
 
     snap.docs.forEach(d => {
-      const o = d.data();
-      rows.push(
-        [
-          d.id,
-          o.productName,
-          o.quantity ?? 1,
-          o.unitPrice ?? o.amount,
-          o.subtotal ?? o.amount,
+        const o = d.data();
+        const orderLevelFields = [
           o.discountCode,
           o.discountAmount,
           o.shippingFee,
@@ -53,13 +47,44 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
           o.paymentMethod,
           o.createdAt?.toDate?.()?.toISOString() || "",
           o.paidAt?.toDate?.()?.toISOString() || "",
-        ]
-          .map(csvEscape)
-          .join(",")
-      );
-    });
+        ];
 
-    return new NextResponse(rows.join("\n"), {
+        // Multi-item cart orders (Combo/MiniStore) store a real items[] array —
+        // emit one row per line item so quantities/prices are accurate per
+        // product, instead of collapsing to the single-item summary fields.
+        // Legacy/simple orders without items[] fall back to the old summary row.
+        if (Array.isArray(o.items) && o.items.length > 0) {
+          o.items.forEach((item: any) => {
+            rows.push(
+              [
+                d.id,
+                item.productName,
+                item.quantity ?? 1,
+                item.unitPrice ?? 0,
+                (item.unitPrice ?? 0) * (item.quantity ?? 1),
+                ...orderLevelFields,
+              ]
+                .map(csvEscape)
+                .join(",")
+            );
+          });
+        } else {
+          rows.push(
+            [
+              d.id,
+              o.productName,
+              o.quantity ?? 1,
+              o.unitPrice ?? o.amount,
+              o.subtotal ?? o.amount,
+              ...orderLevelFields,
+            ]
+              .map(csvEscape)
+              .join(",")
+          );
+        }
+      });
+
+      return new NextResponse(rows.join("\n"), {
       status: 200,
       headers: {
         "Content-Type": "text/csv",
