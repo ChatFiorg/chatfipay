@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
-import { resolveStaffToken } from "@/lib/staffAuth";
+import { resolveStaffOrOwner } from "@/lib/staffOrOwnerAuth";
 
 const VALID_STAGES = ["processing", "shipped", "delivered"];
 
 // PATCH /api/store/[slug]/staff/orders/[orderId]/fulfillment
-// Authorization: Bearer <staff token>. Requires permissions.orders.
+// Authorization: Bearer <staff token OR owner token>. Requires permissions.orders.
 // body: { fulfillmentStatus: 'processing' | 'shipped' | 'delivered' }
 export async function PATCH(
   req: NextRequest,
@@ -15,13 +15,13 @@ export async function PATCH(
   const { slug, orderId } = await params;
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const payload = await resolveStaffToken(token, slug);
+  const auth = await resolveStaffOrOwner(token, slug);
 
-  if (!payload) {
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!payload.permissions.orders) {
-    return NextResponse.json({ error: "You don\'t have permission to update orders" }, { status: 403 });
+  if (!auth.permissions.orders) {
+    return NextResponse.json({ error: "You don't have permission to update orders" }, { status: 403 });
   }
 
   try {
@@ -44,7 +44,7 @@ export async function PATCH(
     await orderRef.set({
       fulfillmentStatus,
       [`fulfillmentTimestamps.${fulfillmentStatus}`]: now,
-      lastUpdatedByStaff: payload.email,
+      lastUpdatedByStaff: auth.actor,
     }, { merge: true });
 
     return NextResponse.json({ success: true, fulfillmentStatus });

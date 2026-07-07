@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
-import { resolveStaffToken } from "@/lib/staffAuth";
+import { resolveStaffOrOwner } from "@/lib/staffOrOwnerAuth";
 
-// DELETE /api/store/[slug]/staff/products/[productId] — Authorization: Bearer <staff token>
+// DELETE /api/store/[slug]/staff/products/[productId] — Authorization: Bearer <staff token OR owner token>
 // Requires permissions.products.
 export async function DELETE(
   req: NextRequest,
@@ -11,12 +11,12 @@ export async function DELETE(
   const { slug, productId } = await params;
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const payload = await resolveStaffToken(token, slug);
+  const auth = await resolveStaffOrOwner(token, slug);
 
-  if (!payload) {
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!payload.permissions.products) {
+  if (!auth.permissions.products) {
     return NextResponse.json({ error: "You don't have permission to manage products" }, { status: 403 });
   }
 
