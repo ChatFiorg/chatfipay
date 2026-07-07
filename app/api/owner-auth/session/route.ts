@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, db } from "@/lib/firebaseAdmin";
+import { db } from "@/lib/firebaseAdmin";
+import { auth } from "@/lib/firebaseAdminAuth";
 import { signOwnerToken, normalizeEmail } from "@/lib/ownerAuth";
 
 // POST /api/owner-auth/session
