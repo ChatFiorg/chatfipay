@@ -3,7 +3,7 @@ import { db } from "./firebaseAdmin";
 export interface StockDeduction {
   productId: string;
   quantity: number;
-  variantKey?: string;
+  variantKey?: string | null;
 }
 
 export interface SelectedAddOn {
@@ -77,7 +77,7 @@ export async function resolveOrderPricing(
       stockDeductions.push({ productId: item.productId, quantity: needed });
     }
   } else {
-    stockDeductions.push({ productId: product.id, quantity, variantKey: variantKeyResolved });
+    stockDeductions.push({ productId: product.id, quantity, variantKey: variantKeyResolved ?? null });
   }
 
   return { unitPrice, addOnsSelected, stockDeductions };
