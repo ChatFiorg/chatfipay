@@ -8,6 +8,7 @@ import { resolveLoyaltyRedemption } from "@/lib/loyalty";
 import { applyGiftCard } from "@/lib/giftCards";
 import { derivePaymentAddress } from "@/lib/derivedWallet";
 import { fundDepositAddress } from "@/lib/fundDeposit";
+import { PublicKey } from "@solana/web3.js";
 
 interface ResolvedLine {
   productId: string;
@@ -66,6 +67,23 @@ export async function POST(
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const store = storeSnap.data()!;
+
+    // Resolve where swept USDC should ultimately land. Prefer an explicit
+    // cryptoPayoutWallet (set by web/email-signup owners who have no
+    // embedded wallet), falling back to ownerWallet (mobile owners, whose
+    // ownerWallet is always a real Solana pubkey). Validate up front so we
+    // fail with a clear buyer-facing message instead of a silent sweep
+    // failure hours later.
+    const cryptoDestination = store.cryptoPayoutWallet || store.ownerWallet;
+    let merchantWallet: string;
+    try {
+      merchantWallet = new PublicKey(cryptoDestination).toBase58();
+    } catch {
+      return NextResponse.json(
+        { error: "This store hasn't set up crypto payouts yet" },
+        { status: 400 }
+      );
+    }
     if (!store.live) return NextResponse.json({ error: "Store is offline" }, { status: 403 });
 
     if (deliveryMethod === "pickup" && !store.shipping?.pickupEnabled) {
@@ -211,7 +229,7 @@ export async function POST(
     await db.collection("pay_links").doc(payLinkId).set({
       merchantId: slug,
       walletAddress: depositAddress,
-      merchantWallet: store.ownerWallet,
+      merchantWallet,
       amount: amountUsdc,
       token: "USDC",
       label: `${summaryName} x${totalQuantity}`,
