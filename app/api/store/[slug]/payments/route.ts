@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { verifyStoreAccess } from "@/lib/storeAccess";
+import { PublicKey } from "@solana/web3.js";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       bankName: payout.bankName || "",
       accountNumber: payout.accountNumberMasked || "",
       verified: payout.verified || false,
+      cryptoPayoutWallet: data.cryptoPayoutWallet || "",
     });
   } catch (e) {
     console.error(e);
@@ -53,12 +55,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   try {
     const body = await req.json();
-    const { businessName, bankCode, bankName, accountNumber, percentageCharge, ownerWallet } = body;
+    const { businessName, bankCode, bankName, accountNumber, percentageCharge, ownerWallet, cryptoPayoutWallet } = body;
 
     const authorized = await verifyStoreAccess(req, slug);
     if (!authorized) {
       const legacyOk = await legacyOwnerWalletMatches(slug, ownerWallet || null);
       if (!legacyOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Crypto payout wallet can be saved independently of the bank flow below,
+    // so an owner without a Solana wallet on their profile (email/Google
+    // signup) can still receive USDC payments by pasting in an external
+    // wallet address (e.g. Phantom/Solflare) here.
+    if (cryptoPayoutWallet !== undefined && !businessName && !bankCode && !accountNumber) {
+      const trimmed = String(cryptoPayoutWallet).trim();
+      if (!trimmed) {
+        await db.collection("stores").doc(slug).set({ cryptoPayoutWallet: "" }, { merge: true });
+        return NextResponse.json({ success: true, cryptoPayoutWallet: "" });
+      }
+      try {
+        const validated = new PublicKey(trimmed).toBase58();
+        await db.collection("stores").doc(slug).set({ cryptoPayoutWallet: validated }, { merge: true });
+        return NextResponse.json({ success: true, cryptoPayoutWallet: validated });
+      } catch {
+        return NextResponse.json({ error: "That doesn't look like a valid Solana wallet address" }, { status: 400 });
+      }
     }
 
     if (!businessName) return NextResponse.json({ error: "Missing businessName" }, { status: 400 });
