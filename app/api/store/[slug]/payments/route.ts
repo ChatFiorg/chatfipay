@@ -41,6 +41,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       accountNumber: payout.accountNumberMasked || "",
       verified: payout.verified || false,
       cryptoPayoutWallet: data.cryptoPayoutWallet || "",
+      // True if this store's ownerWallet is itself a real Solana address
+      // (mobile/app signup with an embedded wallet) rather than an
+      // "email:"/"google:" identifier. Those owners already receive USDC
+      // via the ownerWallet fallback in the charge route, so the web
+      // dashboard doesn't need to prompt them for a separate crypto wallet.
+      isWalletOwner: (() => {
+        try {
+          new PublicKey(data.ownerWallet || "");
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
     });
   } catch (e) {
     console.error(e);
