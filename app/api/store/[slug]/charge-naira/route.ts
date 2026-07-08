@@ -65,14 +65,14 @@ export async function POST(
       return NextResponse.json({ error: "Store has no owner wallet" }, { status: 400 });
     }
 
-    const merchantSnap = await db.collection("merchants").doc(store.ownerWallet).get();
-    if (!merchantSnap.exists || !merchantSnap.data()!.paystackSubaccountCode) {
+    const payoutAccount = store.payoutAccount || {};
+    if (!payoutAccount.subaccountCode || !payoutAccount.verified) {
       return NextResponse.json(
         { error: "Merchant has not connected a payout bank account yet" },
         { status: 400 }
       );
     }
-    const subaccountCode = merchantSnap.data()!.paystackSubaccountCode;
+    const subaccountCode = payoutAccount.subaccountCode;
 
     // Resolve, validate, and price each line item independently (MoQ/MaxOQ,
     // stock, bundles, add-ons all respected per line), then sum for the

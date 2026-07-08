@@ -39,14 +39,14 @@ export async function POST(
     const ownerWallet = storeSnap.data()!.ownerWallet;
     if (!ownerWallet) return NextResponse.json({ error: "Store has no owner wallet" }, { status: 400 });
 
-    const merchantSnap = await db.collection("merchants").doc(ownerWallet).get();
-    if (!merchantSnap.exists || !merchantSnap.data()!.paystackSubaccountCode) {
+    const payoutAccount = storeSnap.data()!.payoutAccount || {};
+    if (!payoutAccount.subaccountCode || !payoutAccount.verified) {
       return NextResponse.json(
         { error: "Merchant has not connected a payout bank account yet" },
         { status: 400 }
       );
     }
-    const subaccountCode = merchantSnap.data()!.paystackSubaccountCode;
+    const subaccountCode = payoutAccount.subaccountCode;
 
     const reference = `chatfi_${orderId}_${Date.now()}`;
     const amountKobo = Math.round(order.amount * 100);
