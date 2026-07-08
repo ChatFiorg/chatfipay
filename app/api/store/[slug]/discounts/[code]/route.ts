@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
-
-async function getStoreByApiKey(apiKey: string | null, slug: string) {
-  if (!apiKey) return null;
-  const snap = await db.collection("storeKeys").doc(slug).get();
-  if (!snap.exists) return null;
-  const data = snap.data()!;
-  if (data.apiKey !== apiKey) return null;
-  return data;
-}
+import { verifyStoreAccess } from "@/lib/storeAccess";
 
 // PATCH /api/store/[slug]/discounts/[code] — toggle active state (owner only)
 // body: { active: boolean }
@@ -17,9 +9,8 @@ export async function PATCH(
   { params }: { params: Promise<{ slug: string; code: string }> }
 ) {
   const { slug, code } = await params;
-  const apiKey = req.headers.get("x-api-key");
-  const storeKey = await getStoreByApiKey(apiKey, slug);
-  if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  const authorized = await verifyStoreAccess(req, slug);
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
@@ -41,9 +32,8 @@ export async function DELETE(
   { params }: { params: Promise<{ slug: string; code: string }> }
 ) {
   const { slug, code } = await params;
-  const apiKey = req.headers.get("x-api-key");
-  const storeKey = await getStoreByApiKey(apiKey, slug);
-  if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  const authorized = await verifyStoreAccess(req, slug);
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     await db.collection("stores").doc(slug).collection("discounts").doc(decodeURIComponent(code).toUpperCase()).delete();
