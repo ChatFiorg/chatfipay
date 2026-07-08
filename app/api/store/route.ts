@@ -3,6 +3,8 @@ import { db } from "@/lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyOwnerToken } from "@/lib/ownerAuth";
 
+export const dynamic = "force-dynamic";
+
 function generateApiKey(username: string) {
   const rand = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   return `sk_store_${username}_${rand}`;
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { username, name, description, logo, banner, favicon, category, theme, contact, shipping, loyalty, analytics, countdownPromo } = body;
+    const { username, name, description, logo, banner, favicon, category, theme, contact, shipping, loyalty, analytics, countdownPromo, live } = body;
 
     if (!username) return NextResponse.json({ error: "Missing username" }, { status: 400 });
 
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
     setIfProvidedOrNew('loyalty', loyalty, { enabled: false, earnRate: 1, redeemValue: 1 });
     setIfProvidedOrNew('analytics', analytics, { gaId: '', fbPixelId: '' });
     setIfProvidedOrNew('countdownPromo', countdownPromo, { enabled: false, message: '', endsAt: null });
+    setIfProvidedOrNew('live', live, false);
 
     if (isNewStore) {
       storeUpdate.live = false;
