@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
-
-async function getStoreByApiKey(apiKey: string | null, slug: string) {
-  if (!apiKey) return null;
-  const snap = await db.collection("storeKeys").doc(slug).get();
-  if (!snap.exists) return null;
-  const data = snap.data()!;
-  if (data.apiKey !== apiKey) return null;
-  return data;
-}
+import { verifyStoreAccess } from "@/lib/storeAccess";
 
 // GET /api/store/[slug]/customers/[phone] — one customer + their order history
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string; phone: string }> }) {
   const { slug, phone } = await params;
-  const apiKey = req.headers.get("x-api-key");
-  const storeKey = await getStoreByApiKey(apiKey, slug);
-  if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  const authorized = await verifyStoreAccess(req, slug);
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const custSnap = await db.collection("stores").doc(slug).collection("customers").doc(phone).get();
@@ -66,9 +57,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 // body: { tags: string[] }
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ slug: string; phone: string }> }) {
   const { slug, phone } = await params;
-  const apiKey = req.headers.get("x-api-key");
-  const storeKey = await getStoreByApiKey(apiKey, slug);
-  if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  const authorized = await verifyStoreAccess(req, slug);
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
