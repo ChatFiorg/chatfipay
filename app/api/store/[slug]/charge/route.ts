@@ -275,6 +275,7 @@ export async function POST(
       discountAmount,
       amountUsdc,
       ngnPerUsdc,
+      paymentMethod: "usdc",
       status: "pending",
       paymentRef: payLinkId,
       chatfiPaySlug: payLinkId,
