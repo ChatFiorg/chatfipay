@@ -5,11 +5,27 @@ import { verifyStoreAccess } from "@/lib/storeAccess";
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 
-// GET /api/store/[slug]/payments — bank payout account status for this store
+// Legacy fallback: mobile app has no owner-token flow yet, so it sends the
+// raw wallet address directly (same pattern already used by /api/store and
+// /api/store/products). Verified against the wallet's own usernames array.
+async function legacyOwnerWalletMatches(slug: string, ownerWallet: string | null): Promise<boolean> {
+  if (!ownerWallet) return false;
+  const snap = await db.collection("storeWallets").doc(ownerWallet).get();
+  if (!snap.exists) return false;
+  const usernames: string[] = snap.data()?.usernames || [];
+  return usernames.includes(slug);
+}
+
+// GET /api/store/[slug]/payments?ownerWallet=xxx — bank payout account status for this store
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+
   const authorized = await verifyStoreAccess(req, slug);
-  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorized) {
+    const { searchParams } = new URL(req.url);
+    const legacyOk = await legacyOwnerWalletMatches(slug, searchParams.get("ownerWallet"));
+    if (!legacyOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const snap = await db.collection("stores").doc(slug).get();
@@ -31,15 +47,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 }
 
 // POST /api/store/[slug]/payments — connect/update bank payout account
-// body: { businessName, bankCode, bankName, accountNumber, percentageCharge? }
+// body: { businessName, bankCode, bankName, accountNumber, percentageCharge?, ownerWallet? }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const authorized = await verifyStoreAccess(req, slug);
-  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
-    const { businessName, bankCode, bankName, accountNumber, percentageCharge } = body;
+    const { businessName, bankCode, bankName, accountNumber, percentageCharge, ownerWallet } = body;
+
+    const authorized = await verifyStoreAccess(req, slug);
+    if (!authorized) {
+      const legacyOk = await legacyOwnerWalletMatches(slug, ownerWallet || null);
+      if (!legacyOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!businessName) return NextResponse.json({ error: "Missing businessName" }, { status: 400 });
     if (!bankCode) return NextResponse.json({ error: "Missing bankCode" }, { status: 400 });
