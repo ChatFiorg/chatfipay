@@ -55,6 +55,10 @@ export async function POST(
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const store = storeSnap.data()!;
+    const allowedPaymentMethod = store.contact?.paymentMethod || "both";
+    if (allowedPaymentMethod === "usdc") {
+      return NextResponse.json({ error: "This store only accepts USDC payments" }, { status: 400 });
+    }
     if (!store.live) return NextResponse.json({ error: "Store is offline" }, { status: 403 });
 
     if (deliveryMethod === "pickup" && !store.shipping?.pickupEnabled) {

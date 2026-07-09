@@ -67,6 +67,10 @@ export async function POST(
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const store = storeSnap.data()!;
+    const allowedPaymentMethod = store.contact?.paymentMethod || "both";
+    if (allowedPaymentMethod === "naira") {
+      return NextResponse.json({ error: "This store only accepts Naira payments" }, { status: 400 });
+    }
 
     // Resolve where swept USDC should ultimately land. Prefer an explicit
     // cryptoPayoutWallet (set by web/email-signup owners who have no
