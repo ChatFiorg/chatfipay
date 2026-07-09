@@ -54,6 +54,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       price: d.data().price || 0,
     }));
 
+    // Low stock products (stock <= 5, excluding unlimited-stock items where stock is null)
+    const allProductsSnap = await db.collection("stores").doc(slug).collection("products").get();
+    const lowStock = allProductsSnap.docs
+      .map(d => ({ id: d.id, name: d.data().name, stock: d.data().stock }))
+      .filter(p => p.stock != null && p.stock <= 5)
+      .sort((a, b) => (a.stock || 0) - (b.stock || 0))
+      .slice(0, 10);
+
+    // Payment method breakdown — pull paid orders and group by paymentMethod
+    const paidOrdersSnap = await db.collection("stores").doc(slug).collection("orders")
+      .where("status", "==", "paid")
+      .get();
+
+    const paymentMethods: Record<string, { count: number; revenue: number }> = {};
+    for (const doc of paidOrdersSnap.docs) {
+      const o = doc.data();
+      const method = o.paymentMethod || "unknown";
+      if (!paymentMethods[method]) paymentMethods[method] = { count: 0, revenue: 0 };
+      paymentMethods[method].count += 1;
+      paymentMethods[method].revenue += o.amount || 0;
+    }
+
     // This week vs last week revenue
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -82,6 +104,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       },
       daily: filledDaily,
       topProducts,
+      lowStock,
+      paymentMethods,
     });
   } catch (e) {
     console.error(e);
