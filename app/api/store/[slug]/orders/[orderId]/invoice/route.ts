@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { verifyStoreAccess } from "@/lib/storeAccess";
 
 async function getStoreByApiKey(apiKey: string | null, slug: string) {
   if (!apiKey) return null;
@@ -134,9 +135,8 @@ export async function GET(
   { params }: { params: Promise<{ slug: string; orderId: string }> }
 ) {
   const { slug, orderId } = await params;
-  const apiKey = req.headers.get("x-api-key") || req.nextUrl.searchParams.get("key");
-  const storeKey = await getStoreByApiKey(apiKey, slug);
-  if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  const authorized = await verifyStoreAccess(req, slug);
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const storeSnap = await db.collection("stores").doc(slug).get();

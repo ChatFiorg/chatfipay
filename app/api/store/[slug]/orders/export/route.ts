@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { verifyStoreAccess } from "@/lib/storeAccess";
 
 async function getStoreByApiKey(apiKey: string | null, slug: string) {
   if (!apiKey) return null;
@@ -18,9 +19,8 @@ function csvEscape(v: any): string {
 // GET /api/store/[slug]/orders/export — export orders as CSV (owner only, x-api-key header)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const apiKey = req.headers.get("x-api-key");
-  const storeKey = await getStoreByApiKey(apiKey, slug);
-  if (!storeKey) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  const authorized = await verifyStoreAccess(req, slug);
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const snap = await db.collection("stores").doc(slug).collection("orders")
