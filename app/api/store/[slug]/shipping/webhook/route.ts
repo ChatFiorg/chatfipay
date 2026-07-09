@@ -13,20 +13,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const rawBody = await req.text();
     const body = JSON.parse(rawBody);
 
-    // Verify signature if a webhook secret is on file for this store.
-    // Non-fatal if missing: automated/route.ts doesn't currently capture
-    // a signing secret from Terminal's create-webhook response, so most
-    // stores won't have one yet. Once that's wired up, this becomes a hard
-    // requirement (return 401 on mismatch) rather than a soft check.
+    // Terminal Africa doesn't issue a separate webhook signing secret —
+    // per their docs, every webhook is signed with the account's own
+    // SECRET_KEY (the same key stored as terminalApiKey). This is a hard,
+    // blocking check: no key on file or a signature mismatch both reject.
     const keySnap = await db.collection("storeKeys").doc(slug).get();
-    const webhookSecret = keySnap.exists ? keySnap.data()!.terminalWebhookSecret : null;
-    if (webhookSecret) {
-      const signature = req.headers.get("x-terminal-signature");
-      const valid = verifyTerminalWebhookSignature(signature, webhookSecret, rawBody);
-      if (!valid) {
-        console.error(`Terminal webhook signature mismatch for store ${slug}`);
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-      }
+    const terminalApiKey = keySnap.exists ? keySnap.data()!.terminalApiKey : null;
+    if (!terminalApiKey) {
+      console.error(`Terminal webhook received but no API key on file for store ${slug}`);
+      return NextResponse.json({ error: "No Terminal Africa key on file" }, { status: 401 });
+    }
+    const signature = req.headers.get("x-terminal-signature");
+    const valid = verifyTerminalWebhookSignature(signature, terminalApiKey, rawBody);
+    if (!valid) {
+      console.error(`Terminal webhook signature mismatch for store ${slug}`);
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     const event = body.event || body.type;
