@@ -24,16 +24,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     const orders = snap.docs.map(d => {
       const data = d.data();
       return {
-        id: d.id,
-        items: data.items || (data.productId ? [{ productId: data.productId, productName: data.productName, quantity: data.quantity || 1 }] : []),
-        buyerName: data.buyerName || null,
-        buyerPhone: data.buyerPhone || null,
-        amount: data.amount,
-        status: data.status,
-        fulfillmentStatus: data.fulfillmentStatus || null,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-        paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
-      };
+          id: d.id,
+          items: data.items || (data.productId ? [{ productId: data.productId, productName: data.productName, quantity: data.quantity || 1 }] : []),
+          buyerName: data.buyerName || null,
+          buyerPhone: data.buyerPhone || null,
+          buyerEmail: data.buyerEmail || null,
+          buyerWallet: data.buyerWallet || null,
+          buyerDelivery: data.buyerDelivery || null,
+          amount: data.amount,
+          subtotal: data.subtotal ?? null,
+          discountCode: data.discountCode || null,
+          discountAmount: data.discountAmount ?? null,
+          giftCardCode: data.giftCardCode || null,
+          giftCardAmountUsed: data.giftCardAmountUsed ?? null,
+          pointsRedeemed: data.pointsRedeemed ?? null,
+          loyaltyDiscount: data.loyaltyDiscount ?? null,
+          deliveryMethod: data.deliveryMethod || null,
+          shippingFee: data.shippingFee ?? null,
+          shippingAddress: data.shippingAddress || null,
+          shippingStatus: data.shippingStatus || null,
+          paymentMethod: data.paymentMethod || null,
+          paymentStatus: data.paymentStatus || null,
+          paystackRef: data.paystackRef || null,
+          status: data.status,
+          fulfillmentStatus: data.fulfillmentStatus || null,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+          paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
+        };
     });
 
     const paid = orders.filter(o => o.status === "paid").length;
