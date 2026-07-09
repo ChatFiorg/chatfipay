@@ -69,19 +69,28 @@ export async function POST(req: NextRequest) {
     let ownerIdentifier: string;
     let ownerWallet: string;
 
+    // Normalizes a "wallet:<address>" owner id (from the web session-token flow)
+    // down to the same raw address form the legacy/mobile flow has always used.
+    // Without this, the same owner ends up with two different identity strings
+    // depending on which surface they signed in from, which broke the
+    // storeUsernames ownership check and made owners get "Username already
+    // taken" / no-access errors on their own store from whichever surface
+    // they didn't originally create it on.
+    const normalizeWallet = (w: string) => (w.startsWith("wallet:") ? w.slice(7) : w);
+
     if (ownerPayload) {
       // Web flow: authenticated via signed owner session token (wallet, Google, or email).
       const [ownerKind, identifier] = ownerPayload.ownerId.split(/:(.+)/);
       ownerCollection = ownerKind === "wallet" ? "storeWallets" : "storeEmails";
       ownerIdentifier = identifier;
-      ownerWallet = ownerPayload.ownerId;
+      ownerWallet = ownerKind === "wallet" ? identifier : ownerPayload.ownerId;
     } else if (body.ownerWallet) {
       // Legacy/mobile flow: Rchatfi calls this endpoint directly with a raw wallet
       // address in the body, with no owner session token. Preserved as-is so the
       // mobile app keeps working without requiring an app update.
       ownerCollection = "storeWallets";
-      ownerIdentifier = body.ownerWallet;
-      ownerWallet = body.ownerWallet;
+      ownerIdentifier = normalizeWallet(body.ownerWallet);
+      ownerWallet = normalizeWallet(body.ownerWallet);
     } else {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -91,7 +100,7 @@ export async function POST(req: NextRequest) {
     if (!username) return NextResponse.json({ error: "Missing username" }, { status: 400 });
 
     const existing = await db.collection("storeUsernames").doc(username).get();
-    if (existing.exists && existing.data()!.ownerWallet !== ownerWallet) {
+    if (existing.exists && normalizeWallet(existing.data()!.ownerWallet) !== normalizeWallet(ownerWallet)) {
       return NextResponse.json({ error: "Username already taken" }, { status: 409 });
     }
 
