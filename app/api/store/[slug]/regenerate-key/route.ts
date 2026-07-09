@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     await db.collection("storeKeys").doc(slug).set({
       username: slug,
-      ownerWallet,
+      ownerWallet: ownerWallet || storeSnap.data()!.ownerWallet || null,
       apiKey: newApiKey,
       apiKeyPrefix,
       createdAt: new Date().toISOString(),
