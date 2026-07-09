@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { verifyStoreAccess } from "@/lib/storeAccess";
 
 function generateApiKey(username: string) {
   const rand = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -14,11 +15,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   try {
     const body = await req.json();
     const { ownerWallet } = body;
-    if (!ownerWallet) return NextResponse.json({ error: "Missing ownerWallet" }, { status: 400 });
 
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
-    if (storeSnap.data()!.ownerWallet !== ownerWallet) {
+
+    const walletMatches = ownerWallet && storeSnap.data()!.ownerWallet === ownerWallet;
+    const sessionAuthorized = await verifyStoreAccess(req, slug);
+    if (!walletMatches && !sessionAuthorized) {
       return NextResponse.json({ error: "Not authorized for this store" }, { status: 403 });
     }
 

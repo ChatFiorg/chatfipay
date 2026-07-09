@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { verifyStoreAccess } from "@/lib/storeAccess";
 
 const VERCEL_PROJECT_ID = "prj_AMh5p9qlQxZHQKHiJNejQa0PBFvr"; // chatfistore
 const VERCEL_TEAM_ID = "team_U19GHjZvbaTVoiTHr7SKpL2n";
@@ -22,11 +23,13 @@ function dnsInstructionsFor(domain: string) {
   return { type: "subdomain", recordType: "CNAME", name: subPart, value: "cname.vercel-dns.com" };
 }
 
-async function verifyOwner(slug: string, ownerWallet: string) {
+async function verifyOwner(req: NextRequest, slug: string, ownerWallet: string | null) {
   const snap = await db.collection("stores").doc(slug).get();
   if (!snap.exists) return { ok: false, status: 404, error: "Store not found" };
   const data = snap.data()!;
-  if (data.ownerWallet !== ownerWallet) return { ok: false, status: 403, error: "Not authorized for this store" };
+  const walletMatches = ownerWallet && data.ownerWallet === ownerWallet;
+  const sessionAuthorized = await verifyStoreAccess(req, slug);
+  if (!walletMatches && !sessionAuthorized) return { ok: false, status: 403, error: "Not authorized for this store" };
   return { ok: true, data };
 }
 
@@ -36,14 +39,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   try {
     const body = await req.json();
     const { domain, ownerWallet } = body;
-    if (!domain || !ownerWallet) return NextResponse.json({ error: "Missing domain or ownerWallet" }, { status: 400 });
+    if (!domain) return NextResponse.json({ error: "Missing domain" }, { status: 400 });
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(cleanDomain)) {
       return NextResponse.json({ error: "Invalid domain format" }, { status: 400 });
     }
 
-    const auth = await verifyOwner(slug, ownerWallet);
+    const auth = await verifyOwner(req, slug, ownerWallet || null);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     // Reject if this domain is already mapped to a different store
@@ -124,9 +127,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
   try {
     const body = await req.json();
     const { ownerWallet } = body;
-    if (!ownerWallet) return NextResponse.json({ error: "Missing ownerWallet" }, { status: 400 });
 
-    const auth = await verifyOwner(slug, ownerWallet);
+    const auth = await verifyOwner(req, slug, ownerWallet || null);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const domain = auth.data!.customDomain;
