@@ -19,7 +19,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
 
-    const walletMatches = ownerWallet && storeSnap.data()!.ownerWallet === ownerWallet;
+    let walletMatches = false;
+    if (ownerWallet) {
+      const ownerWalletSnap = await db.collection("storeWallets").doc(ownerWallet).get();
+      const usernames: string[] = ownerWalletSnap.data()?.usernames || [];
+      walletMatches = usernames.includes(slug);
+    }
     const sessionAuthorized = await verifyStoreAccess(req, slug);
     if (!walletMatches && !sessionAuthorized) {
       return NextResponse.json({ error: "Not authorized for this store" }, { status: 403 });
