@@ -65,24 +65,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     let resolvedActiveId = activeAddressId || existingAutomated.activeAddressId || (addresses[0]?.id ?? null);
     let pickupAddress: any = null;
     let pickupAddressId: string | null = existingAutomated.pickupAddressId || null;
+    let terminalAddressWarning: string | null = null;
 
     for (const addr of addresses) {
       const prior = existingById[addr.id];
       if (addr.id === resolvedActiveId) {
         let terminalAddressId = prior?.terminalAddressId || addr.terminalAddressId || null;
         if (!terminalAddressId) {
-          const created = await createTerminalAddress(terminalApiKey, {
-            first_name: addr.firstName,
-            last_name: addr.lastName,
-            email: addr.email,
-            phone: addr.phone,
-            line1: addr.line1,
-            city: addr.city,
-            state: addr.state,
-            country: addr.country || 'NG',
-            zip: addr.zip || undefined,
-          });
-          terminalAddressId = created.address_id || created.id || null;
+          // Creating the Terminal Africa address is best-effort: if it fails
+          // (e.g. KYC not yet approved), we still save the address book to
+          // Firestore so the merchant doesn't lose their input. Live rates
+          // simply won't work until this succeeds on a later save.
+          try {
+            const created = await createTerminalAddress(terminalApiKey, {
+              first_name: addr.firstName,
+              last_name: addr.lastName,
+              email: addr.email,
+              phone: addr.phone,
+              line1: addr.line1,
+              city: addr.city,
+              state: addr.state,
+              country: addr.country || 'NG',
+              zip: addr.zip || undefined,
+            });
+            terminalAddressId = created.address_id || created.id || null;
+          } catch (e: any) {
+            console.error("Terminal address creation failed:", e);
+            terminalAddressWarning = e.message || "Could not register this address with Terminal Africa yet";
+          }
         }
         addr.terminalAddressId = terminalAddressId;
         pickupAddress = { ...addr };
@@ -115,7 +125,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     await storeRef.set({ shipping: { automated } }, { merge: true });
 
-    return NextResponse.json({ success: true, automated });
+    return NextResponse.json({ success: true, automated, warning: terminalAddressWarning || undefined });
   } catch (e: any) {
     console.error(e);
     return NextResponse.json({ error: e.message || "Server error" }, { status: 500 });
