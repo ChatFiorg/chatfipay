@@ -29,7 +29,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   try {
     const body = await req.json();
-    const { enabled, defaultWeightKg, pickupAddress, apiKey } = body;
+    const { enabled, defaultWeightKg, savedAddresses, activeAddressId, apiKey } = body;
+
+    if (savedAddresses && savedAddresses.length > 5) {
+      return NextResponse.json({ error: "Maximum of 5 saved addresses allowed" }, { status: 400 });
+    }
 
     const keyRef = db.collection("storeKeys").doc(slug);
     const keySnap = await keyRef.get();
@@ -48,22 +52,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const storeSnap = await storeRef.get();
     const existingAutomated = storeSnap.exists ? (storeSnap.data()!.shipping?.automated || {}) : {};
 
-    let pickupAddressId = existingAutomated.pickupAddressId || null;
     let webhookId = existingAutomated.webhookId || null;
 
-    if (pickupAddress) {
-      const created = await createTerminalAddress(terminalApiKey, {
-        first_name: pickupAddress.firstName,
-        last_name: pickupAddress.lastName,
-        email: pickupAddress.email,
-        phone: pickupAddress.phone,
-        line1: pickupAddress.line1,
-        city: pickupAddress.city,
-        state: pickupAddress.state,
-        country: pickupAddress.country || 'NG',
-        zip: pickupAddress.zip || undefined,
-      });
-      pickupAddressId = created.address_id || created.id || pickupAddressId;
+    // savedAddresses: client owns the array (up to 5, each with a label like
+    // "Headquarters" or "Branch 2"). Only the active one needs a Terminal
+    // Africa address_id — created lazily on first save, reused afterward so
+    // we don't create duplicate addresses on Terminal's side every save.
+    const addresses = Array.isArray(savedAddresses) ? savedAddresses : (existingAutomated.savedAddresses || []);
+    const existingById: Record<string, any> = {};
+    for (const a of (existingAutomated.savedAddresses || [])) existingById[a.id] = a;
+
+    let resolvedActiveId = activeAddressId || existingAutomated.activeAddressId || (addresses[0]?.id ?? null);
+    let pickupAddress: any = null;
+    let pickupAddressId: string | null = existingAutomated.pickupAddressId || null;
+
+    for (const addr of addresses) {
+      const prior = existingById[addr.id];
+      if (addr.id === resolvedActiveId) {
+        let terminalAddressId = prior?.terminalAddressId || addr.terminalAddressId || null;
+        if (!terminalAddressId) {
+          const created = await createTerminalAddress(terminalApiKey, {
+            first_name: addr.firstName,
+            last_name: addr.lastName,
+            email: addr.email,
+            phone: addr.phone,
+            line1: addr.line1,
+            city: addr.city,
+            state: addr.state,
+            country: addr.country || 'NG',
+            zip: addr.zip || undefined,
+          });
+          terminalAddressId = created.address_id || created.id || null;
+        }
+        addr.terminalAddressId = terminalAddressId;
+        pickupAddress = { ...addr };
+        pickupAddressId = terminalAddressId;
+      } else if (prior?.terminalAddressId) {
+        addr.terminalAddressId = prior.terminalAddressId;
+      }
     }
 
     if (!webhookId) {
@@ -80,6 +106,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       enabled: !!enabled,
       provider: 'terminal',
       defaultWeightKg: defaultWeightKg ? Number(defaultWeightKg) : (existingAutomated.defaultWeightKg ?? 1),
+      savedAddresses: addresses,
+      activeAddressId: resolvedActiveId,
       pickupAddress: pickupAddress || existingAutomated.pickupAddress || null,
       pickupAddressId,
       webhookId,
