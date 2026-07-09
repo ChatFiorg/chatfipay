@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { settleLoyaltyForOrder } from "@/lib/loyalty";
+import { arrangeTerminalPickup } from "@/lib/terminalAfrica";
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -137,6 +138,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       const update: any = { stock: FieldValue.increment(-Math.min(item.quantity, product.stock)), unitsSold: FieldValue.increment(item.quantity) };
       if (newStock === 0) update.active = false;
       await productRef.update(update);
+    }
+
+    // Book the shipment with Terminal Africa if the customer selected a
+    // courier rate at checkout and the store has automated shipping on.
+    // Non-fatal: a booking failure shouldn't block payment confirmation —
+    // the merchant can still see the order and arrange delivery manually.
+    if (order.shippingRateId) {
+      try {
+        const storeSnap = await db.collection("stores").doc(slug).get();
+        const automated = storeSnap.exists ? storeSnap.data()!.shipping?.automated : null;
+        if (automated?.enabled) {
+          const keySnap = await db.collection("storeKeys").doc(slug).get();
+          const terminalApiKey = keySnap.exists ? keySnap.data()!.terminalApiKey : null;
+          if (terminalApiKey) {
+            const shipment = await arrangeTerminalPickup(terminalApiKey, order.shippingRateId);
+            await orderRef.update({
+              shipmentId: shipment.shipment_id || shipment.id || null,
+              trackingCode: shipment.tracking_code || shipment.trackingCode || null,
+              trackingUrl: shipment.tracking_url || null,
+              shippingStatus: "booked",
+              shippingBookedAt: now,
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Terminal shipment booking failed (non-fatal):", e);
+        await orderRef.update({ shippingStatus: "booking_failed" }).catch(() => {});
+      }
     }
 
     // Settle loyalty points: credit points earned on this order, debit any

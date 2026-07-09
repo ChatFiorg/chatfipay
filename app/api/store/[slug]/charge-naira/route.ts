@@ -29,7 +29,7 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode, buyerToken, giftCardCode } = body;
+    const { buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, callbackUrl, discountCode, buyerToken, giftCardCode, shippingRateId, shippingAddress } = body;
     const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
     const redeemPoints = Math.max(0, Math.floor(Number(body.redeemPoints) || 0));
 
@@ -175,6 +175,9 @@ export async function POST(
       buyerDelivery: buyerDelivery || null,
       deliveryMethod,
       shippingFee,
+      shippingRateId: shippingRateId || null,
+      shippingAddress: shippingAddress || null,
+      shippingStatus: shippingRateId ? "pending" : null,
       pointsRedeemed: redeemedPoints,
       loyaltyDiscount: redemptionValue,
       giftCardCode: appliedGiftCardCode,
