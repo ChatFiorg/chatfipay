@@ -107,6 +107,31 @@ export async function notifyOrderEvent(slug: string, orderId: string, event: Ord
         </div>`;
         await sendEmail(acctEmail, subject, html).catch(e => console.error(`Account ${event} email failed:`, e));
       }
+
+      // Staff emails — sent to every staff member with manage-order permission,
+      // per Bumpa's "staff with manage order access" wording.
+      const staffSettings = notif.staff || {};
+      const staffEnabled = event === "created" ? !!staffSettings.orderCreated : !!staffSettings.orderConfirmed;
+      if (staffEnabled) {
+        try {
+          const staffSnap = await db.collection("stores").doc(slug).collection("staff").where("permissions.orders", "==", true).get();
+          const subject = event === "created" ? `New order - ${storeName}` : `Order paid - ${storeName}`;
+          const html = `<div style="font-family:sans-serif;max-width:420px;margin:0 auto;padding:24px">
+            <h2 style="margin-bottom:4px">${event === "created" ? "New order received" : "Order payment confirmed"}</h2>
+            <p style="color:#555">Order <b>${orderId}</b> \u2014 ${order.productName || ""}</p>
+            <p style="color:#555">Buyer: ${order.buyerName || "N/A"} (${order.buyerEmail || order.buyerPhone || "no contact"})</p>
+            <p style="color:#555">Total: ${money(order.amount)}</p>
+            <a href="https://store.chatfi.pro/${slug}/dashboard/orders" style="display:inline-block;margin-top:16px;padding:12px 20px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">View order</a>
+          </div>`;
+          for (const staffDoc of staffSnap.docs) {
+            const staffEmail = staffDoc.id;
+            if (staffEmail === acctEmail) continue; // avoid duplicate if owner is also listed as staff
+            await sendEmail(staffEmail, subject, html).catch(e => console.error(`Staff ${event} email failed for ${staffEmail}:`, e));
+          }
+        } catch (e) {
+          console.error(`Staff ${event} notification lookup failed:`, e);
+        }
+      }
     }
   } catch (e) {
     console.error(`notifyOrderEvent(${event}) failed:`, e);
