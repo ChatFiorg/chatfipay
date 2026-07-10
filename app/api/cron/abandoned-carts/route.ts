@@ -47,6 +47,8 @@ export async function GET(req: NextRequest) {
         storeCache.set(slug, store);
       }
 
+        if (!store.globalSettings?.orders?.abandonedOrderRecovery) { skipped++; continue; }
+
       try {
         await sendAbandonedCartEmail(order.buyerEmail, store.name || slug, slug, order.productName || "your order");
         await doc.ref.set({ abandonedReminderSentAt: Timestamp.now() }, { merge: true });
