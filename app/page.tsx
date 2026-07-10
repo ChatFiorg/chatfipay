@@ -6,8 +6,19 @@ export default function Home() {
   const [wallet, setWallet] = useState("");
 
   return (
-    <main className="min-h-screen bg-black flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md flex flex-col gap-8">
+    <main className="relative min-h-screen flex flex-col items-center justify-center px-4 py-12 overflow-hidden bg-black">
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover opacity-40"
+      >
+        <source src="/videos/hero-bg.mp4" type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-black" />
+
+      <div className="relative z-10 w-full max-w-md flex flex-col gap-8">
         <div className="flex flex-col gap-2">
           <h1 className="text-white text-3xl font-bold">
             ChatFi <span className="text-[#C7F284]">Pay</span>
@@ -23,7 +34,7 @@ export default function Home() {
             value={wallet}
             onChange={(e) => setWallet(e.target.value)}
             placeholder="Enter your Solana wallet address"
-            className="bg-[#0A0A0A] text-white border border-[#1F1F1F] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#C7F284] transition-all placeholder:text-gray-600"
+            className="bg-[#0A0A0A]/90 backdrop-blur text-white border border-[#1F1F1F] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#C7F284] transition-all placeholder:text-gray-600"
           />
         </div>
 
