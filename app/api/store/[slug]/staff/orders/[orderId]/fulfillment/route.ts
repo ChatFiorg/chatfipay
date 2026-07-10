@@ -4,7 +4,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { resolveStaffOrOwner } from "@/lib/staffOrOwnerAuth";
 import { notifyOrderEvent } from "@/lib/orderNotifications";
 
-const VALID_STAGES = ["processing", "shipped", "delivered"];
+const VALID_STAGES = ["processing", "packed", "awaiting_shipping", "shipped", "delivered", "picked_up", "returned"];
 
 // PATCH /api/store/[slug]/staff/orders/[orderId]/fulfillment
 // Authorization: Bearer <staff token OR owner token>. Requires permissions.orders.
@@ -48,8 +48,17 @@ export async function PATCH(
       lastUpdatedByStaff: auth.actor,
     }, { merge: true });
 
-    if (fulfillmentStatus === "shipped" || fulfillmentStatus === "delivered") {
-      await notifyOrderEvent(slug, orderId, "shippedDelivered").catch(e => console.error("notifyOrderEvent(shippedDelivered) failed:", e));
+    const STAGE_EVENT_MAP: Record<string, string> = {
+      shipped: "shippedDelivered",
+      delivered: "shippedDelivered",
+      packed: "orderPacked",
+      awaiting_shipping: "awaitingShipping",
+      picked_up: "orderPickedUp",
+      returned: "orderReturned",
+    };
+    const eventName = STAGE_EVENT_MAP[fulfillmentStatus];
+    if (eventName) {
+      await notifyOrderEvent(slug, orderId, eventName as any).catch(e => console.error(`notifyOrderEvent(${eventName}) failed:`, e));
     }
 
     return NextResponse.json({ success: true, fulfillmentStatus });

@@ -21,7 +21,7 @@ function money(n: number): string {
   return `\u20a6${Number(n || 0).toLocaleString("en-NG")}`;
 }
 
-export type OrderEvent = "created" | "confirmed" | "shippedDelivered" | "cancelled";
+export type OrderEvent = "created" | "confirmed" | "shippedDelivered" | "cancelled" | "awaitingShipping" | "orderPacked" | "orderPickedUp" | "orderReturned";
 
 const CUSTOMER_COPY: Record<OrderEvent, { settingKey: string; defaultOn: boolean; subject: (storeName: string) => string; heading: string; body: (storeName: string, orderId: string) => string }> = {
   created: {
@@ -51,6 +51,34 @@ const CUSTOMER_COPY: Record<OrderEvent, { settingKey: string; defaultOn: boolean
     subject: (storeName) => `Order cancelled - ${storeName}`,
     heading: "Order cancelled",
     body: (storeName, orderId) => `Your order <b>${orderId}</b> at ${storeName} has been cancelled. If you were charged, please contact the store for next steps.`,
+  },
+  awaitingShipping: {
+    settingKey: "awaitingShipping",
+    defaultOn: false,
+    subject: (storeName) => `Your order is awaiting shipping - ${storeName}`,
+    heading: "Awaiting shipping",
+    body: (storeName, orderId) => `Order <b>${orderId}</b> at ${storeName} is packed and awaiting pickup by the courier.`,
+  },
+  orderPacked: {
+    settingKey: "orderPacked",
+    defaultOn: false,
+    subject: (storeName) => `Your order has been packed - ${storeName}`,
+    heading: "Order packed",
+    body: (storeName, orderId) => `Order <b>${orderId}</b> at ${storeName} has been packed and is ready for shipping.`,
+  },
+  orderPickedUp: {
+    settingKey: "orderPickedUp",
+    defaultOn: false,
+    subject: (storeName) => `Your order has been picked up - ${storeName}`,
+    heading: "Order picked up",
+    body: (storeName, orderId) => `Order <b>${orderId}</b> at ${storeName} has been picked up.`,
+  },
+  orderReturned: {
+    settingKey: "orderReturned",
+    defaultOn: false,
+    subject: (storeName) => `Your order has been returned - ${storeName}`,
+    heading: "Order returned",
+    body: (storeName, orderId) => `Order <b>${orderId}</b> at ${storeName} has been marked as returned.`,
   },
 };
 
