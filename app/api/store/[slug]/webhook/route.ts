@@ -3,6 +3,7 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { settleLoyaltyForOrder } from "@/lib/loyalty";
 import { arrangeTerminalPickup } from "@/lib/terminalAfrica";
+import { notifyOrderEvent } from "@/lib/orderNotifications";
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -54,6 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       buyerEmailNormalized: normalizedEmail,
       customerKey,
     });
+
+    await notifyOrderEvent(slug, orderId, "confirmed").catch(e => console.error("notifyOrderEvent(confirmed) failed:", e));
 
     if (order.paymentRef) {
       await db.collection("pay_links").doc(order.paymentRef).update({

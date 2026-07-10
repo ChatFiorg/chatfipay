@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { notifyOrderEvent } from "@/lib/orderNotifications";
 import { applyDiscountCode } from "@/lib/discounts";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { resolveLoyaltyRedemption } from "@/lib/loyalty";
@@ -202,6 +203,8 @@ export async function POST(
         paidAt: null,
       });
 
+      await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
+
       await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -291,6 +294,8 @@ export async function POST(
     });
 
     await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
+
+    await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
 
     const response = NextResponse.json({
       success: true,
