@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import { sendAbandonedCartEmail } from "@/lib/abandonedCart";
+import { releaseExpiredReservations } from "@/lib/inventoryReservation";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -57,6 +58,14 @@ export async function GET(req: NextRequest) {
         console.error(`Failed to send abandoned cart email for order ${doc.id}:`, e);
         skipped++;
       }
+    }
+
+    // Safety net: release any expired stock reservations for stores touched
+    // by this run. The lazy per-checkout release in charge/charge-naira
+    // routes handles active stores; this catches low-traffic stores where
+    // nobody attempts a new checkout to trigger that release.
+    for (const slug of storeCache.keys()) {
+      await releaseExpiredReservations(slug);
     }
 
     return NextResponse.json({ success: true, remindersSent: sent, skipped, totalScanned: snap.size });
