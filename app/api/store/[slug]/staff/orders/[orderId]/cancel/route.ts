@@ -36,13 +36,14 @@ export async function PATCH(
       return NextResponse.json({ success: true, orderId, status: "cancelled", alreadyProcessed: true });
     }
 
-    const wasPaid = order.status === "paid";
     const now = Timestamp.now();
 
-    // If the order was already paid, its webhook run already deducted stock —
-    // restore it now that the order is being cancelled. Mirrors the deduction
-    // logic in webhook/route.ts, run in reverse.
-    if (wasPaid) {
+    // Stock needs restoring if the order was paid (webhook already deducted
+    // it) OR if it was still pending but had inventory reserved at checkout
+    // (Reserve Inventory setting). Mirrors the deduction logic in
+    // webhook/route.ts and charge/charge-naira routes, run in reverse.
+    const shouldRestoreStock = order.status === "paid" || order.stockReserved === true;
+    if (shouldRestoreStock) {
       const stockDeductions: { productId: string; quantity: number; variantKey?: string }[] =
         Array.isArray(order.stockDeductions) && order.stockDeductions.length > 0
           ? order.stockDeductions
@@ -87,6 +88,7 @@ export async function PATCH(
     await orderRef.set({
       status: "cancelled",
       cancelledAt: now,
+      stockReserved: false,
       lastUpdatedByStaff: auth.actor,
     }, { merge: true });
 
