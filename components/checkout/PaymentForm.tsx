@@ -27,6 +27,7 @@ const PaymentForm = ({ walletAddress }: PaymentFormProps) => {
         body: JSON.stringify({
           walletAddress,
           amount: amount ? parseFloat(amount) : null,
+          token: "USDC",
           label,
           memo,
         }),
@@ -44,12 +45,22 @@ const PaymentForm = ({ walletAddress }: PaymentFormProps) => {
   return (
     <div className="flex flex-col gap-4 w-full max-w-md">
       <Input
-        label="Amount (SOL)"
+        label="Amount"
         value={amount}
         onChange={setAmount}
         placeholder="0.00"
         type="number"
         hint="Leave empty for any amount"
+        suffix={
+          <>
+            <img
+              src="https://store.chatfi.pro/logos/usdc.png"
+              alt=""
+              className="w-3.5 h-3.5"
+            />
+            USDC
+          </>
+        }
       />
       <Input
         label="Label"
