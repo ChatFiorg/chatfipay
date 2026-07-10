@@ -2,6 +2,7 @@
   "buildCommand": "next build --webpack",
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/abandoned-carts", "schedule": "0 9 * * *" }
+    { "path": "/api/cron/abandoned-carts", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/performance-digests", "schedule": "0 8 * * *" }
   ]
 }
