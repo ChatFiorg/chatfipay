@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { verifyStoreAccess } from "@/lib/storeAccess";
+import { resolveStaffOrOwner } from "@/lib/staffOrOwnerAuth";
+import { notifyStaffDownload } from "@/lib/downloadNotifications";
 
 async function getStoreByApiKey(apiKey: string | null, slug: string) {
   if (!apiKey) return null;
@@ -16,11 +18,26 @@ function csvEscape(v: any): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// GET /api/store/[slug]/orders/export — export orders as CSV (owner only, x-api-key header)
+// GET /api/store/[slug]/orders/export — export orders as CSV.
+// Accepts EITHER a staff/owner Bearer token (dashboard login) OR the legacy
+// x-api-key header, so both staff (with orders permission) and owners can
+// download, not just owners via API key.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const authorized = await verifyStoreAccess(req, slug);
-  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const authHeader = req.headers.get("authorization") || "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  let actor: string | null = null;
+
+  if (bearerToken) {
+    const auth = await resolveStaffOrOwner(bearerToken, slug);
+    if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!auth.permissions.orders) return NextResponse.json({ error: "You don't have permission to export orders" }, { status: 403 });
+    actor = auth.actor;
+  } else {
+    const authorized = await verifyStoreAccess(req, slug);
+    if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const snap = await db.collection("stores").doc(slug).collection("orders")
@@ -83,6 +100,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
           );
         }
       });
+
+      if (actor) {
+        await notifyStaffDownload(slug, actor, "orders").catch(e => console.error("notifyStaffDownload failed:", e));
+      }
 
       return new NextResponse(rows.join("\n"), {
       status: 200,
