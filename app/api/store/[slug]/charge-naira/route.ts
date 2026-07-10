@@ -3,6 +3,8 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { notifyOrderEvent } from "@/lib/orderNotifications";
+import { releaseExpiredReservations, reserveStockForOrder, RESERVATION_WINDOW_MS } from "@/lib/inventoryReservation";
+import { Timestamp as TimestampType } from "firebase-admin/firestore";
 import { applyDiscountCode } from "@/lib/discounts";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { resolveLoyaltyRedemption } from "@/lib/loyalty";
@@ -154,6 +156,8 @@ export async function POST(
     const finalAmount = Math.max(totalBeforeGiftCard - giftCardAmountUsed, 0);
 
     const orderId = crypto.randomBytes(8).toString("hex");
+    await releaseExpiredReservations(slug);
+    const reserveInventoryEnabled = !!store.globalSettings?.inventory?.reserveInventory;
     const now = Timestamp.now();
     const reference = `chatfi_${orderId}_${Date.now()}`;
     const amountKobo = Math.round(finalAmount * 100);
@@ -198,10 +202,15 @@ export async function POST(
       paymentStatus: "pending",
       createdAt: now,
       paidAt: null,
+      stockReserved: reserveInventoryEnabled,
+      reservationExpiresAt: reserveInventoryEnabled ? TimestampType.fromMillis(now.toMillis() + RESERVATION_WINDOW_MS) : null,
     };
 
     if (amountKobo <= 0) {
       await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({ ...orderDoc, status: "pending", amount: 0 });
+      if (reserveInventoryEnabled) {
+        await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+      }
       await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
       await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
         method: "POST",
@@ -216,6 +225,10 @@ export async function POST(
     }
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set(orderDoc);
+
+    if (reserveInventoryEnabled) {
+      await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+    }
 
     await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
 

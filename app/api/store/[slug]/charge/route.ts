@@ -3,6 +3,8 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { notifyOrderEvent } from "@/lib/orderNotifications";
+import { releaseExpiredReservations, reserveStockForOrder, RESERVATION_WINDOW_MS } from "@/lib/inventoryReservation";
+import { Timestamp as TimestampType } from "firebase-admin/firestore";
 import { applyDiscountCode } from "@/lib/discounts";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { resolveLoyaltyRedemption } from "@/lib/loyalty";
@@ -169,6 +171,12 @@ export async function POST(
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
 
+    await releaseExpiredReservations(slug);
+    const reserveInventoryEnabled = !!store.globalSettings?.inventory?.reserveInventory;
+    const reservationFields: Record<string, any> = reserveInventoryEnabled
+      ? { stockReserved: true, reservationExpiresAt: TimestampType.fromMillis(now.toMillis() + RESERVATION_WINDOW_MS) }
+      : { stockReserved: false, reservationExpiresAt: null };
+
     const summaryName = resolvedLines.length === 1
       ? resolvedLines[0].productName
       : `${resolvedLines[0].productName} +${resolvedLines.length - 1} more`;
@@ -201,7 +209,12 @@ export async function POST(
         status: "pending",
         createdAt: now,
         paidAt: null,
+        ...reservationFields,
       });
+
+      if (reserveInventoryEnabled) {
+        await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+      }
 
       await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
 
@@ -291,7 +304,12 @@ export async function POST(
       chatfiPaySlug: payLinkId,
       createdAt: now,
       paidAt: null,
+      ...reservationFields,
     });
+
+    if (reserveInventoryEnabled) {
+      await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+    }
 
     await db.collection("storeKeys").doc(slug).update({ lastUsed: now });
 

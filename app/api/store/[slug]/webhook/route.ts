@@ -114,6 +114,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
             ? [{ productId: order.productId, quantity: order.quantity || 1 }]
             : [];
 
+    if (!order.stockReserved) {
     for (const item of stockDeductions) {
       if (!item.productId) continue;
       const productRef = db.collection("stores").doc(slug).collection("products").doc(item.productId);
@@ -147,6 +148,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       if (newStock === 0) update.active = false;
       await productRef.update(update);
     }
+  } else {
+    await orderRef.update({ stockReserved: false });
+  }
 
     // Book the shipment with Terminal Africa if the customer selected a
     // courier rate at checkout and the store has automated shipping on.
