@@ -4,6 +4,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { settleLoyaltyForOrder } from "@/lib/loyalty";
 import { arrangeTerminalPickup } from "@/lib/terminalAfrica";
 import { notifyOrderEvent } from "@/lib/orderNotifications";
+import { notifyNewCustomer } from "@/lib/campaignEmails";
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -80,8 +81,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         orderCount: FieldValue.increment(1),
         lastOrderAt: now,
       };
-      if (!custSnap.exists) custUpdate.firstOrderAt = now;
+      const isNewCustomer = !custSnap.exists;
+      if (isNewCustomer) custUpdate.firstOrderAt = now;
       await custRef.set(custUpdate, { merge: true });
+      if (isNewCustomer) {
+        await notifyNewCustomer(slug, order.buyerEmail, order.buyerName).catch(e => console.error("notifyNewCustomer failed:", e));
+      }
     }
 
     // Update store-level stats (analytics)
