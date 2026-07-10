@@ -10,7 +10,7 @@ const PayTabs = ({ children, labels }: Props) => {
   const [active, setActive] = useState(0);
   return (
     <div className="flex flex-col gap-4 w-full">
-      <div className="flex gap-2 bg-[#1A1A1A] rounded-xl p-1">
+      <div className="flex gap-2 bg-[#0A0A0A] rounded-xl p-1">
         {labels.map((label, i) => (
           <button
             key={label}

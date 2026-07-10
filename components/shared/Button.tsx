@@ -12,9 +12,9 @@ interface ButtonProps {
 const Button = ({ label, onClick, variant = "primary", disabled, fullWidth, icon }: ButtonProps) => {
   const base = "flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold text-sm transition-all";
   const variants = {
-    primary: "bg-[#AAFF00] text-black hover:bg-[#99ee00]",
-    outline: "border border-[#AAFF00] text-[#AAFF00] hover:bg-[#AAFF00]/10",
-    ghost: "text-[#AAFF00] hover:bg-[#AAFF00]/10",
+    primary: "bg-[#C7F284] text-black hover:bg-[#b8e873]",
+    outline: "border border-[#C7F284] text-[#C7F284] hover:bg-[#C7F284]/10",
+    ghost: "text-[#C7F284] hover:bg-[#C7F284]/10",
   };
 
   return (

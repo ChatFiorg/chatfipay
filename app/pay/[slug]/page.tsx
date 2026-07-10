@@ -21,11 +21,11 @@ export default async function PayPage({ params }: Props) {
     : Date.now();
 
   return (
-    <main className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md bg-[#141414] rounded-3xl overflow-hidden border border-[#2A2A2A]">
+    <main className="min-h-screen bg-black flex flex-col items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md bg-[#0A0A0A] rounded-3xl overflow-hidden border border-[#1F1F1F]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2A2A2A]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1F1F1F]">
           <span className="text-gray-500 text-[10px] uppercase tracking-[0.12em] font-medium">
             Payment Request
           </span>
@@ -45,7 +45,7 @@ export default async function PayPage({ params }: Props) {
         ) : (
           <>
             {/* Amount block */}
-            <div className="px-5 py-5 border-b border-[#2A2A2A]">
+            <div className="px-5 py-5 border-b border-[#1F1F1F]">
               {payment.label && (
                 <p className="text-gray-500 text-xs mb-1.5">
                   From <span className="text-gray-200 font-semibold">{payment.label}</span>
@@ -66,7 +66,7 @@ export default async function PayPage({ params }: Props) {
             </div>
 
             {/* Network row */}
-            <div className="flex items-center gap-1.5 px-5 py-2.5 border-b border-[#2A2A2A]">
+            <div className="flex items-center gap-1.5 px-5 py-2.5 border-b border-[#1F1F1F]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#C7F284]" />
               <span className="text-gray-500 text-[11px] font-medium">Solana network only</span>
             </div>
@@ -82,7 +82,7 @@ export default async function PayPage({ params }: Props) {
                     label={payment.label}
                     paymentId={slug}
                   />
-                  <div className="border-t border-[#2A2A2A] pt-4">
+                  <div className="border-t border-[#1F1F1F] pt-4">
                     <PayButton
                       paymentId={slug}
                       walletAddress={payment.walletAddress}

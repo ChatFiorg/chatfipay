@@ -18,7 +18,7 @@ const Input = ({ label, value, onChange, placeholder, type = "text", hint }: Inp
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="bg-[#1A1A1A] text-white border border-[#2A2A2A] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#AAFF00] transition-all placeholder:text-gray-600"
+        className="bg-[#0A0A0A] text-white border border-[#1F1F1F] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#C7F284] transition-all placeholder:text-gray-600"
       />
       {hint && <span className="text-xs text-gray-500">{hint}</span>}
     </div>

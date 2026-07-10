@@ -28,13 +28,13 @@ const QRDisplay = ({ link, walletAddress, amount, token = "SOL", label, paymentI
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      <div className="border border-[#C7F284] rounded-2xl p-4 bg-[#141414]">
+      <div className="border border-[#C7F284] rounded-2xl p-4 bg-[#000000]">
         <img src={qrUrl} alt="QR Code" width={200} height={200} />
       </div>
       <p className="text-gray-500 text-xs text-center break-all px-4 font-mono">{link}</p>
       <button
         onClick={copy}
-        className="flex items-center gap-2 bg-[#1A1A1A] border border-[#2A2A2A] text-white rounded-xl px-5 py-3 text-sm font-semibold hover:border-[#C7F284] transition-all"
+        className="flex items-center gap-2 bg-[#0A0A0A] border border-[#1F1F1F] text-white rounded-xl px-5 py-3 text-sm font-semibold hover:border-[#C7F284] transition-all"
       >
         {copied ? <Check size={16} className="text-[#C7F284]" /> : <Copy size={16} />}
         {copied ? "Copied!" : "Copy Link"}

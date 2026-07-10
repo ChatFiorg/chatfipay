@@ -77,7 +77,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId, storeUser
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       {/* Token selector */}
-      <div className="flex gap-2 w-full bg-[#1A1A1A] rounded-xl p-1">
+      <div className="flex gap-2 w-full bg-[#0A0A0A] rounded-xl p-1">
         {TOKENS.map((t) => (
           <button
             key={t.symbol}
@@ -94,7 +94,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId, storeUser
       </div>
 
       {amount && (
-        <div className="w-full bg-[#1A1A1A] rounded-xl p-3 text-center">
+        <div className="w-full bg-[#0A0A0A] rounded-xl p-3 text-center">
           <p className="text-gray-400 text-xs uppercase tracking-wide">Send exactly</p>
           <p className={`text-2xl font-bold font-mono tabular-nums mt-0.5 ${selectedToken.symbol === 'SOL' ? 'text-gray-400' : 'text-[#C7F284]'}`}>
             {amount} {selectedToken.symbol === 'SOL' ? token : selectedToken.symbol}
@@ -106,7 +106,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId, storeUser
       )}
 
       {/* QR */}
-      <div className="relative border border-[#C7F284] rounded-2xl p-4 bg-[#141414]">
+      <div className="relative border border-[#C7F284] rounded-2xl p-4 bg-[#000000]">
         <img
           src={qrUrl}
           alt="Wallet QR"
@@ -122,7 +122,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId, storeUser
       </div>
 
       {/* Address */}
-      <div className="w-full bg-[#1A1A1A] rounded-xl p-4 flex items-center gap-3">
+      <div className="w-full bg-[#0A0A0A] rounded-xl p-4 flex items-center gap-3">
         {selectedToken.symbol === 'SOL' ? (
           <p className="text-gray-500 text-xs flex-1 text-center">Not available for SOL</p>
         ) : (
@@ -145,7 +145,7 @@ const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId, storeUser
       {selectedToken.symbol !== 'SOL' && !polling && (
         <button
           onClick={() => setPolling(true)}
-          className="w-full bg-[#1A1A1A] border border-[#C7F284]/30 text-[#C7F284] font-semibold rounded-xl py-3 text-sm hover:bg-[#C7F284]/10 transition-all"
+          className="w-full bg-[#0A0A0A] border border-[#C7F284]/30 text-[#C7F284] font-semibold rounded-xl py-3 text-sm hover:bg-[#C7F284]/10 transition-all"
         >
           I've sent it — confirm payment
         </button>

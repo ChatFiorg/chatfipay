@@ -132,7 +132,7 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "USDC", st
 
       {/* Wallet list */}
       {showWallets && (
-        <div className="flex flex-col gap-2 bg-[#1A1A1A] rounded-xl p-3 border border-[#2A2A2A]">
+        <div className="flex flex-col gap-2 bg-[#0A0A0A] rounded-xl p-3 border border-[#1F1F1F]">
           {WALLETS.map(wallet => (
             <a
               key={wallet.scheme}
@@ -156,7 +156,7 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "USDC", st
           <a
             href={solanaPayUrl}
             onClick={() => { setShowWallets(false); setTimeout(() => setPolling(true), 15000); }}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#222] transition-all border-t border-[#2A2A2A] mt-1 pt-3"
+            className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#222] transition-all border-t border-[#1F1F1F] mt-1 pt-3"
           >
             <div className="w-7 h-7 rounded-lg bg-[#C7F284]/10 flex items-center justify-center text-[#C7F284] text-xs font-bold">◎</div>
             <span className="text-gray-400 text-sm font-semibold">Other Solana Wallet</span>
