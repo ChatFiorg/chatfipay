@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { username, name, description, policy, logo, banner, favicon, category, theme, contact, shipping, loyalty, analytics, countdownPromo, live } = body;
+    const { username, name, description, policy, logo, banner, favicon, category, theme, contact, shipping, loyalty, analytics, countdownPromo, live, globalSettings } = body;
 
     if (!username) return NextResponse.json({ error: "Missing username" }, { status: 400 });
 
@@ -156,6 +156,7 @@ export async function POST(req: NextRequest) {
     setIfProvidedOrNew('analytics', analytics, { gaId: '', fbPixelId: '' });
     setIfProvidedOrNew('countdownPromo', countdownPromo, { enabled: false, message: '', endsAt: null });
     setIfProvidedOrNew('live', live, false);
+    setIfProvidedOrNew('globalSettings', globalSettings, {});
 
     if (isNewStore) {
       storeUpdate.live = false;
