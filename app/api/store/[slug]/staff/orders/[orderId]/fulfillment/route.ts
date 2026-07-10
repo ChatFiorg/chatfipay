@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import { resolveStaffOrOwner } from "@/lib/staffOrOwnerAuth";
+import { notifyOrderEvent } from "@/lib/orderNotifications";
 
 const VALID_STAGES = ["processing", "shipped", "delivered"];
 
@@ -46,6 +47,10 @@ export async function PATCH(
       [`fulfillmentTimestamps.${fulfillmentStatus}`]: now,
       lastUpdatedByStaff: auth.actor,
     }, { merge: true });
+
+    if (fulfillmentStatus === "shipped" || fulfillmentStatus === "delivered") {
+      await notifyOrderEvent(slug, orderId, "shippedDelivered").catch(e => console.error("notifyOrderEvent(shippedDelivered) failed:", e));
+    }
 
     return NextResponse.json({ success: true, fulfillmentStatus });
   } catch (e: any) {
