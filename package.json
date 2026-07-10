@@ -19,8 +19,10 @@
     "nanoid": "^5.1.11",
     "next": "16.2.9",
     "pdfkit": "^0.19.1",
+    "postcss": "^8.5.16",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "sanitize-html": "^2.17.5",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
@@ -28,6 +30,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sanitize-html": "^2.16.1",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
