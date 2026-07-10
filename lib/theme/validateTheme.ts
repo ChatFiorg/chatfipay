@@ -10,7 +10,7 @@ interface ThemeValidationResult {
 
 const ALLOWED_TAGS = [
   'div', 'span', 'p', 'a', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'ul', 'ol', 'li', 'section', 'header', 'footer', 'nav', 'button',
+  'ul', 'ol', 'li', 'section', 'header', 'footer', 'nav', 'main', 'button',
   'table', 'tr', 'td', 'th', 'thead', 'tbody', 'form', 'input', 'label'
 ];
 
