@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     let sent = 0;
     let skipped = 0;
-    const storeCache = new Map<string, { name?: string }>();
+    const storeCache = new Map<string, { name?: string; globalSettings?: { orders?: { abandonedOrderRecovery?: boolean } } }>();
 
     for (const doc of snap.docs) {
       const order = doc.data();
