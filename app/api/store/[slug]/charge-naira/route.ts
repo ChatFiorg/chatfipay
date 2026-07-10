@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { notifyOrderEvent } from "@/lib/orderNotifications";
 import { applyDiscountCode } from "@/lib/discounts";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { resolveLoyaltyRedemption } from "@/lib/loyalty";
@@ -201,6 +202,7 @@ export async function POST(
 
     if (amountKobo <= 0) {
       await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({ ...orderDoc, status: "pending", amount: 0 });
+      await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
       await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -214,6 +216,8 @@ export async function POST(
     }
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set(orderDoc);
+
+    await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
 
     const initRes = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
       method: "POST",
