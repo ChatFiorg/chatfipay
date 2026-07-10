@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       return {
         email: d.id,
         name: data.name || null,
-        permissions: data.permissions || { orders: false, products: false },
+        permissions: data.permissions || { orders: false, products: false, analytics: false },
         status: data.status || "invited",
         invitedAt: data.invitedAt?.toDate?.()?.toISOString() || null,
         lastLoginAt: data.lastLoginAt?.toDate?.()?.toISOString() || null,
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const permissions = {
       orders: !!body.permissions?.orders,
       products: !!body.permissions?.products,
+      analytics: !!body.permissions?.analytics,
     };
 
     const storeSnap = await db.collection("stores").doc(slug).get();

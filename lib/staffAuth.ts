@@ -21,6 +21,7 @@ function getAuthSecret(): string {
 export interface StaffPermissions {
   orders: boolean;
   products: boolean;
+  analytics: boolean;
 }
 
 export interface StaffTokenPayload {
@@ -88,6 +89,7 @@ export async function resolveStaffToken(
       permissions: {
         orders: !!data.permissions?.orders,
         products: !!data.permissions?.products,
+        analytics: !!data.permissions?.analytics,
       },
     };
   } catch {

@@ -7,7 +7,7 @@ export interface ResolvedStoreAuth {
   actor: string; // staff email, or "owner:<ownerId>" for audit logging
 }
 
-const FULL_PERMISSIONS: StaffPermissions = { orders: true, products: true };
+const FULL_PERMISSIONS: StaffPermissions = { orders: true, products: true, analytics: true };
 
 // Accepts EITHER a staff token (checked against live Firestore permissions)
 // OR an owner token (granted full permissions if they own this store).
