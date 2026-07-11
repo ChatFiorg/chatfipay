@@ -8,6 +8,16 @@ import { fundDepositAddress } from "@/lib/fundDeposit";
 const VALID_TOKENS = ["SOL", "USDC", "USDT"];
 const DEFAULT_EXPIRY_MINUTES = 60 * 24;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-api-key, idempotency-key",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 async function getMerchantByApiKey(apiKey: string | null) {
   if (!apiKey) return null;
   const snap = await db
@@ -28,7 +38,7 @@ export async function POST(req: NextRequest) {
   const merchant = await getMerchantByApiKey(apiKey);
 
   if (!merchant) {
-    return NextResponse.json({ success: false, error: "Invalid or revoked API key" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "Invalid or revoked API key" }, { status: 401, headers: CORS_HEADERS });
   }
 
   const body = await req.json();
@@ -38,7 +48,7 @@ export async function POST(req: NextRequest) {
   if (!VALID_TOKENS.includes(token)) {
     return NextResponse.json(
       { success: false, error: "token must be one of " + VALID_TOKENS.join(", ") },
-      { status: 400 }
+      { status: 400, headers: CORS_HEADERS }
     );
   }
 
@@ -51,7 +61,7 @@ export async function POST(req: NextRequest) {
       .get();
     if (!existing.empty) {
       const doc = existing.docs[0];
-      return NextResponse.json({ success: true, ...doc.data(), id: doc.id, idempotent: true });
+      return NextResponse.json({ success: true, ...doc.data(), id: doc.id, idempotent: true }, { headers: CORS_HEADERS });
     }
   }
 
@@ -97,25 +107,25 @@ export async function POST(req: NextRequest) {
     label: label || null,
     status: "pending",
     expiresAt: expiresAt.toDate().toISOString(),
-  });
+  }, { headers: CORS_HEADERS });
 }
 
 export async function GET(req: NextRequest) {
   const apiKey = req.headers.get("x-api-key");
   const merchant = await getMerchantByApiKey(apiKey);
   if (!merchant) {
-    return NextResponse.json({ success: false, error: "Invalid or revoked API key" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "Invalid or revoked API key" }, { status: 401, headers: CORS_HEADERS });
   }
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {
-    return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "Missing id" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const docRef = db.collection("pay_links").doc(id);
   const doc = await docRef.get();
   if (!doc.exists) {
-    return NextResponse.json({ success: false, error: "Payment not found" }, { status: 404 });
+    return NextResponse.json({ success: false, error: "Payment not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
   const data = doc.data();
@@ -134,5 +144,5 @@ export async function GET(req: NextRequest) {
     paidAt: data.paidAt ? data.paidAt.toDate().toISOString() : null,
     txSignature: data.txSignature,
     receivedAmount: data.receivedAmount,
-  });
+  }, { headers: CORS_HEADERS });
 }
