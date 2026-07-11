@@ -44,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       .orderBy("createdAt", "desc").get();
 
     const rows = [
-      "orderId,productName,quantity,unitPrice,subtotal,discountCode,discountAmount,shippingFee,deliveryMethod,amount,status,fulfillmentStatus,buyerName,buyerPhone,buyerEmail,buyerDelivery,paymentMethod,createdAt,paidAt"
+      "orderId,productName,quantity,unitPrice,subtotal,discountCode,discountAmount,shippingFee,deliveryMethod,amount,status,fulfillmentStatus,buyerName,buyerPhone,buyerEmail,buyerDelivery,buyerNote,paymentMethod,createdAt,paidAt"
     ];
 
     snap.docs.forEach(d => {
@@ -61,6 +61,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
           o.buyerPhone,
           o.buyerEmail,
           o.buyerDelivery,
+          o.buyerNote,
           o.paymentMethod,
           o.createdAt?.toDate?.()?.toISOString() || "",
           o.paidAt?.toDate?.()?.toISOString() || "",
