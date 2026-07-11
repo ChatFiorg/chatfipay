@@ -54,7 +54,7 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, discountCode, buyerToken, giftCardCode } = body;
+    const { buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery, buyerNote, discountCode, buyerToken, giftCardCode } = body;
     const deliveryMethod = body.deliveryMethod === "pickup" ? "pickup" : "delivery";
     const redeemPoints = Math.max(0, Math.floor(Number(body.redeemPoints) || 0));
 
@@ -194,6 +194,7 @@ export async function POST(
         buyerPhone: buyerPhone || null,
         buyerName: buyerName || null,
         buyerDelivery: buyerDelivery || null,
+      buyerNote: buyerNote || null,
         deliveryMethod,
         shippingFee,
         pointsRedeemed: redeemedPoints,
@@ -266,6 +267,7 @@ export async function POST(
       payerWallet: buyerWallet || null,
       receivedAmount: null,
       buyerDelivery: buyerDelivery || null,
+      buyerNote: buyerNote || null,
       ngnPerUsdc,
       ngnAmount: finalAmount,
     });
@@ -282,6 +284,7 @@ export async function POST(
       buyerPhone: buyerPhone || null,
       buyerName: buyerName || null,
       buyerDelivery: buyerDelivery || null,
+      buyerNote: buyerNote || null,
       deliveryMethod,
       shippingFee,
       shippingRateId: body.shippingRateId || null,
