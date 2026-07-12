@@ -153,7 +153,7 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `inline; filename="invoice-${orderId}.html"`,
+        "Content-Disposition": `attachment; filename="invoice-${orderId}.html"`,
       },
     });
   } catch (e: any) {

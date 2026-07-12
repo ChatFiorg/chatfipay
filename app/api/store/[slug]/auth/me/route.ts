@@ -48,6 +48,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         amount: data.amount,
         status: data.status,
         fulfillmentStatus: data.fulfillmentStatus || null,
+        shippingStatus: data.shippingStatus || null,
+        trackingCode: data.trackingCode || null,
+        trackingUrl: data.trackingUrl || null,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
       };

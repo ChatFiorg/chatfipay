@@ -19,6 +19,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       productName: order.productName || null,
       status: order.status,
       fulfillmentStatus: order.status === "paid" ? (order.fulfillmentStatus || "processing") : null,
+      shippingStatus: order.shippingStatus || null,
+      trackingCode: order.trackingCode || null,
+      trackingUrl: order.trackingUrl || null,
       amount: order.amount || null,
       createdAt: order.createdAt?.toDate?.()?.toISOString() || null,
     });

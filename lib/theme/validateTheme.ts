@@ -21,6 +21,36 @@ const ALLOWED_ATTRIBUTES = {
   'input': ['type', 'name', 'placeholder']
 };
 
+// Card/payment-credential input types have no legitimate use in a storefront
+// theme — real checkout happens through our own payment flow, never through
+// fields typed directly into a merchant's custom HTML.
+const BLOCKED_INPUT_TYPES = ['password'];
+
+// Flags content that looks like it's trying to harvest payment credentials
+// directly (rather than routing through the platform's real checkout).
+// This is a heuristic, not a guarantee — it catches obvious/lazy attempts
+// and gives a manual review signal, not airtight protection.
+const PAYMENT_HARVEST_PATTERNS = [
+  /card\s*number/i,
+  /\bcvv\b/i,
+  /\bcvc\b/i,
+  /card\s*expiry/i,
+  /\bbvn\b/i,
+  /\botp\b/i,
+  /pin\s*code/i,
+  /account\s*pin/i,
+];
+
+// Basic blocklist for overtly harmful/abusive content. This is a coarse
+// keyword pass for moderation signal, not a substitute for human review of
+// flagged submissions.
+const HARMFUL_CONTENT_PATTERNS = [
+  /\brape\b/i,
+  /\bkill\s*(yourself|urself)\b/i,
+  /\bchild\s*(porn|abuse)\b/i,
+  /\bterroris[tm]\b/i,
+];
+
 const REQUIRED_PLACEHOLDERS = ['{{store.name}}', '{{products}}'];
 const MAX_HTML_SIZE = 200000;
 const MAX_CSS_SIZE = 100000;
@@ -36,6 +66,25 @@ export async function validateTheme(
 
   if (/<script/i.test(html)) errors.push('Inline <script> tags are not allowed');
   if (/javascript:/i.test(html)) errors.push('javascript: URLs are not allowed');
+
+  for (const pattern of BLOCKED_INPUT_TYPES) {
+    const re = new RegExp(`type\\s*=\\s*["']?${pattern}["']?`, 'i');
+    if (re.test(html)) errors.push(`Input type "${pattern}" is not allowed — payment/credential fields must go through checkout, not the theme`);
+  }
+
+  for (const pattern of PAYMENT_HARVEST_PATTERNS) {
+    if (pattern.test(html)) {
+      errors.push('Content resembling a payment/credential collection form was found — this template was blocked for review. Payment must go through checkout, never through custom theme fields.');
+      break;
+    }
+  }
+
+  for (const pattern of HARMFUL_CONTENT_PATTERNS) {
+    if (pattern.test(html)) {
+      errors.push('This template contains content that violates our content policy and was blocked.');
+      break;
+    }
+  }
 
   const sanitizedHtml = sanitizeHtml(html, {
     allowedTags: ALLOWED_TAGS,
