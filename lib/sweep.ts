@@ -18,6 +18,10 @@ const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 // Rent-exemption cost for a new SPL token account (paid by depositKeypair
 // when creating the merchant's ATA within this same transaction).
 const ATA_RENT_LAMPORTS = 2_039_280;
+// Flat network-fee surcharge (in USDC base units, 6 decimals) charged to
+// the buyer at checkout and redirected to treasury here instead of being
+// sent to the merchant. Keep in sync with FEE_USDC in charge/route.ts.
+const FEE_USDC_LAMPORTS = BigInt(200_000); // 0.2 USDC
 
 export async function sweepPayment(
   paymentId: string,
@@ -60,14 +64,54 @@ export async function sweepPayment(
     );
   }
 
+  // Split the swept balance: merchant gets the sale amount, treasury
+  // gets the flat network-fee surcharge the buyer already paid at
+  // checkout (see FEE_USDC in charge/route.ts). If the balance is
+  // somehow smaller than the fee (shouldn't happen in practice), skip
+  // the fee split entirely rather than sending the merchant a negative
+  // or zero amount.
+  const treasuryKeyForFee = process.env.TREASURY_PRIVATE_KEY;
+  let feeAmount = BigInt(0);
+  let merchantAmount = fromAccount.amount;
+  let treasuryAta: PublicKey | null = null;
+
+  if (treasuryKeyForFee && fromAccount.amount > FEE_USDC_LAMPORTS) {
+    const treasuryPubkeyForFee = Keypair.fromSecretKey(bs58.decode(treasuryKeyForFee)).publicKey;
+    treasuryAta = await getAssociatedTokenAddress(USDC_MINT, treasuryPubkeyForFee);
+    const treasuryAccount = await getAccount(connection, treasuryAta).catch(() => null);
+    if (!treasuryAccount) {
+      tx.add(
+        createAssociatedTokenAccountInstruction(
+          depositKeypair.publicKey,
+          treasuryAta,
+          treasuryPubkeyForFee,
+          USDC_MINT
+        )
+      );
+    }
+    feeAmount = FEE_USDC_LAMPORTS;
+    merchantAmount = fromAccount.amount - FEE_USDC_LAMPORTS;
+  }
+
   tx.add(
     createTransferInstruction(
       fromAta,
       toAta,
       depositKeypair.publicKey,
-      fromAccount.amount
+      merchantAmount
     )
   );
+
+  if (feeAmount > BigInt(0) && treasuryAta) {
+    tx.add(
+      createTransferInstruction(
+        fromAta,
+        treasuryAta,
+        depositKeypair.publicKey,
+        feeAmount
+      )
+    );
+  }
 
   if (treasuryKey) {
     try {

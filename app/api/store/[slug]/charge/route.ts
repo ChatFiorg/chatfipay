@@ -233,8 +233,12 @@ export async function POST(
       });
     }
 
+    // Buyer covers the on-chain sweep cost (merchant USDC-account rent /
+    // network fee) as a flat 0.2 USDC surcharge, instead of ChatFi
+    // absorbing it. Split out again in sweep.ts.
+    const FEE_USDC = 0.2;
     const ngnPerUsdc = await getNgnPerUsdc();
-    const amountUsdc = Math.round((finalAmount / ngnPerUsdc) * 100) / 100;
+    const amountUsdc = Math.round(((finalAmount / ngnPerUsdc) + FEE_USDC) * 100) / 100;
 
     const expiresAt = Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60000);
     const payLinkId = crypto.randomBytes(8).toString("hex");
@@ -253,6 +257,7 @@ export async function POST(
       merchantWallet,
       amount: amountUsdc,
       token: "USDC",
+      feeUsdc: FEE_USDC,
       label: `${summaryName} x${totalQuantity}`,
       memo: `Order ${orderId} - ${store.name}`,
       status: "pending",
