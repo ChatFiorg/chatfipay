@@ -37,6 +37,10 @@ export async function PATCH(
     if (!orderSnap.exists) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
     const order = orderSnap.data()!;
+
+    if (auth.locationId && order.locationId && order.locationId !== auth.locationId) {
+      return NextResponse.json({ error: "This order belongs to a different location" }, { status: 403 });
+    }
     if (order.status !== "paid") {
       return NextResponse.json({ error: "Order must be paid before updating fulfillment" }, { status: 400 });
     }

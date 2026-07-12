@@ -5,6 +5,7 @@ import { db } from "./firebaseAdmin";
 export interface ResolvedStoreAuth {
   permissions: StaffPermissions;
   actor: string; // staff email, or "owner:<ownerId>" for audit logging
+  locationId: string | null; // null = unrestricted (owner, or staff with no location assigned)
 }
 
 const FULL_PERMISSIONS: StaffPermissions = { orders: true, products: true, analytics: true };
@@ -19,7 +20,7 @@ export async function resolveStaffOrOwner(
 ): Promise<ResolvedStoreAuth | null> {
   const staffPayload = await resolveStaffToken(token, slug);
   if (staffPayload) {
-    return { permissions: staffPayload.permissions, actor: staffPayload.email };
+    return { permissions: staffPayload.permissions, actor: staffPayload.email, locationId: staffPayload.locationId || null };
   }
 
   const ownerPayload = verifyOwnerToken(token);
@@ -33,5 +34,5 @@ export async function resolveStaffOrOwner(
   const usernames: string[] = snap.data()?.usernames || [];
   if (!usernames.includes(slug)) return null;
 
-  return { permissions: FULL_PERMISSIONS, actor: `owner:${ownerPayload.ownerId}` };
+  return { permissions: FULL_PERMISSIONS, actor: `owner:${ownerPayload.ownerId}`, locationId: null };
 }

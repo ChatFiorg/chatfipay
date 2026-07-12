@@ -22,6 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         status: data.status || "invited",
         invitedAt: data.invitedAt?.toDate?.()?.toISOString() || null,
         lastLoginAt: data.lastLoginAt?.toDate?.()?.toISOString() || null,
+        locationId: data.locationId || null,
       };
     });
     return NextResponse.json({ success: true, staff });
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       products: !!body.permissions?.products,
       analytics: !!body.permissions?.analytics,
     };
+    const locationId: string | null = body.locationId || null;
 
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const now = Timestamp.now();
     await db.collection("stores").doc(slug).collection("staff").doc(email).set({
       permissions,
+      locationId,
       status: "invited",
       invitedAt: now,
       lastLoginAt: null,
@@ -63,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     await sendStaffInviteEmail(email, store.name || slug, slug);
 
-    return NextResponse.json({ success: true, email, permissions });
+    return NextResponse.json({ success: true, email, permissions, locationId });
   } catch (e: any) {
     console.error(e);
     return NextResponse.json({ error: e.message || "Server error" }, { status: 500 });

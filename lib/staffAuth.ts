@@ -30,6 +30,7 @@ export interface StaffTokenPayload {
   permissions: StaffPermissions;
   iat: number;
   exp: number;
+  locationId?: string | null;
 }
 
 // Reuses the same signing secret as buyer tokens but a distinct payload
@@ -91,6 +92,7 @@ export async function resolveStaffToken(
         products: !!data.permissions?.products,
         analytics: !!data.permissions?.analytics,
       },
+      locationId: data.locationId || null,
     };
   } catch {
     return null;

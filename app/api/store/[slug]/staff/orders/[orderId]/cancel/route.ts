@@ -33,6 +33,10 @@ export async function PATCH(
 
     const order = orderSnap.data()!;
 
+    if (auth.locationId && order.locationId && order.locationId !== auth.locationId) {
+      return NextResponse.json({ error: "This order belongs to a different location" }, { status: 403 });
+    }
+
     if (order.status === "cancelled") {
       return NextResponse.json({ success: true, orderId, status: "cancelled", alreadyProcessed: true });
     }

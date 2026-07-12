@@ -21,7 +21,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     const snap = await db.collection("stores").doc(slug).collection("orders")
       .orderBy("createdAt", "desc").limit(100).get();
 
-    const orders = snap.docs.map(d => {
+    let staffSeeUnassignedOrders = true;
+    if (auth.locationId) {
+      const storeSnap = await db.collection("stores").doc(slug).get();
+      staffSeeUnassignedOrders = storeSnap.exists ? (storeSnap.data()!.globalSettings?.inventory?.staffSeeUnassignedOrders ?? true) : true;
+    }
+
+    const docs = auth.locationId
+      ? snap.docs.filter(d => {
+          const orderLocationId = d.data().locationId;
+          if (!orderLocationId) return staffSeeUnassignedOrders;
+          return orderLocationId === auth.locationId;
+        })
+      : snap.docs;
+
+
+    const orders = docs.map(d => {
       const data = d.data();
       return {
           id: d.id,
