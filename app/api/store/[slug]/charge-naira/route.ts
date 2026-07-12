@@ -68,6 +68,10 @@ export async function POST(
       return NextResponse.json({ error: "Pickup is not available for this store" }, { status: 400 });
     }
 
+    const locationId: string | null = deliveryMethod === "pickup"
+      ? (store.shipping?.pickupLocationId || null)
+      : (store.shipping?.primaryDeliveryLocationId || null);
+
     if (!store.ownerWallet) {
       return NextResponse.json({ error: "Store has no owner wallet" }, { status: 400 });
     }
@@ -184,6 +188,7 @@ export async function POST(
       buyerDelivery: buyerDelivery || null,
       buyerNote: buyerNote || null,
       deliveryMethod,
+      locationId,
       shippingFee,
       shippingRateId: shippingRateId || null,
       shippingAddress: shippingAddress || null,
@@ -210,7 +215,7 @@ export async function POST(
     if (amountKobo <= 0) {
       await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({ ...orderDoc, status: "pending", amount: 0 });
       if (reserveInventoryEnabled) {
-        await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+        await reserveStockForOrder(slug, combinedStockDeductions, locationId).catch(e => console.error("reserveStockForOrder failed:", e));
       }
       await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
       await fetch(`https://pay.chatfi.pro/api/store/${slug}/webhook`, {
@@ -228,7 +233,7 @@ export async function POST(
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set(orderDoc);
 
     if (reserveInventoryEnabled) {
-      await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+      await reserveStockForOrder(slug, combinedStockDeductions, locationId).catch(e => console.error("reserveStockForOrder failed:", e));
     }
 
     await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
@@ -272,6 +277,7 @@ export async function POST(
       items: resolvedLines,
       subtotal,
       deliveryMethod,
+      locationId,
       shippingFee,
       pointsRedeemed: redeemedPoints,
       loyaltyDiscount: redemptionValue,

@@ -10,7 +10,7 @@ type StockDeduction = { productId: string; quantity: number; variantKey?: string
 // top-level `stock` field as the new sum across all locations so that
 // stats, CSV export, and out-of-stock checks (which all read the flat
 // `stock` field) keep working without any changes on their end.
-function applyLocationDelta(product: any, locationId: string, delta: number): Record<string, any> | null {
+export function applyLocationDelta(product: any, locationId: string, delta: number): Record<string, any> | null {
   const locationStock = product.locationStock;
   if (!locationStock || typeof locationStock !== "object" || !(locationId in locationStock)) return null;
 

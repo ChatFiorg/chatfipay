@@ -5,6 +5,7 @@ import { settleLoyaltyForOrder } from "@/lib/loyalty";
 import { arrangeTerminalPickup } from "@/lib/terminalAfrica";
 import { notifyOrderEvent } from "@/lib/orderNotifications";
 import { notifyNewCustomer } from "@/lib/campaignEmails";
+import { applyLocationDelta } from "@/lib/inventoryReservation";
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -136,6 +137,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         }
         await productRef.update(update);
         continue;
+      }
+
+      if (order.locationId) {
+        const locationUpdate = applyLocationDelta(product, order.locationId, -item.quantity);
+        if (locationUpdate) {
+          await productRef.update({ ...locationUpdate, unitsSold: FieldValue.increment(item.quantity) });
+          continue;
+        }
       }
 
       if (product.stock == null) {

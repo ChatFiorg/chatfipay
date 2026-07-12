@@ -97,6 +97,10 @@ export async function POST(
       return NextResponse.json({ error: "Pickup is not available for this store" }, { status: 400 });
     }
 
+    const locationId: string | null = deliveryMethod === "pickup"
+      ? (store.shipping?.pickupLocationId || null)
+      : (store.shipping?.primaryDeliveryLocationId || null);
+
     const resolvedLines: ResolvedLine[] = [];
     for (const raw of rawItems) {
       const quantity = Math.max(1, Math.floor(Number(raw.quantity) || 1));
@@ -196,6 +200,7 @@ export async function POST(
         buyerDelivery: buyerDelivery || null,
       buyerNote: buyerNote || null,
         deliveryMethod,
+        locationId,
         shippingFee,
         pointsRedeemed: redeemedPoints,
         loyaltyDiscount: redemptionValue,
@@ -214,7 +219,7 @@ export async function POST(
       });
 
       if (reserveInventoryEnabled) {
-        await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+        await reserveStockForOrder(slug, combinedStockDeductions, locationId).catch(e => console.error("reserveStockForOrder failed:", e));
       }
 
       await notifyOrderEvent(slug, orderId, "created").catch(e => console.error("notifyOrderEvent(created) failed:", e));
@@ -291,6 +296,7 @@ export async function POST(
       buyerDelivery: buyerDelivery || null,
       buyerNote: buyerNote || null,
       deliveryMethod,
+      locationId,
       shippingFee,
       shippingRateId: body.shippingRateId || null,
       shippingAddress: body.shippingAddress || null,
@@ -316,7 +322,7 @@ export async function POST(
     });
 
     if (reserveInventoryEnabled) {
-      await reserveStockForOrder(slug, combinedStockDeductions).catch(e => console.error("reserveStockForOrder failed:", e));
+      await reserveStockForOrder(slug, combinedStockDeductions, locationId).catch(e => console.error("reserveStockForOrder failed:", e));
     }
 
     await db.collection("storeKeys").doc(slug).update({ lastUsed: now });

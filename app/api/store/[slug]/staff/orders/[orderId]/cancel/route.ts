@@ -3,6 +3,7 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { resolveStaffOrOwner } from "@/lib/staffOrOwnerAuth";
 import { notifyOrderEvent } from "@/lib/orderNotifications";
+import { applyLocationDelta } from "@/lib/inventoryReservation";
 
 // PATCH /api/store/[slug]/staff/orders/[orderId]/cancel
 // Authorization: Bearer <staff token OR owner token>. Requires permissions.orders.
@@ -70,6 +71,14 @@ export async function PATCH(
           }
           await productRef.update(update);
           continue;
+        }
+
+        if (order.locationId) {
+          const locationUpdate = applyLocationDelta(product, order.locationId, item.quantity);
+          if (locationUpdate) {
+            await productRef.update({ ...locationUpdate, unitsSold: FieldValue.increment(-item.quantity) });
+            continue;
+          }
         }
 
         if (product.stock == null) {
