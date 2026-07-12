@@ -69,6 +69,38 @@ export function hashOtp(otp: string, salt: string): string {
   return crypto.createHmac("sha256", salt).update(otp).digest("hex");
 }
 
+
+export async function sendPasswordResetEmail(email: string, resetLink: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const fromAddress = process.env.RESEND_FROM_EMAIL || "ChatFi <onboarding@resend.dev>";
+  if (!apiKey) throw new Error("RESEND_API_KEY not configured");
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromAddress,
+      to: email,
+      subject: "Reset your ChatFi password",
+      html: `<div style="font-family:sans-serif;max-width:420px;margin:0 auto;padding:24px">
+        <h2 style="margin-bottom:4px">Reset your password</h2>
+        <p style="color:#555">Follow the link below to reset your ChatFi password for your ${email} account. This link expires in 1 hour.</p>
+        <a href="${resetLink}" style="display:inline-block;margin:20px 0;padding:14px 24px;background:#C7F284;color:#0b0b0f;font-weight:700;border-radius:8px;text-decoration:none">Reset Password</a>
+        <p style="color:#999;font-size:12px">If you did not request this, you can safely ignore this email.</p>
+        <p style="color:#999;font-size:12px">Your ChatFi team</p>
+      </div>`,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Resend send failed: ${text}`);
+  }
+}
+
 export async function sendOtpEmail(email: string, otp: string, storeName: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.RESEND_FROM_EMAIL || "ChatFi <onboarding@resend.dev>";

@@ -15,7 +15,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     const keySnap = await db.collection("storeKeys").doc(slug).get();
     const hasApiKey = keySnap.exists && !!keySnap.data()!.terminalApiKey;
 
-    return NextResponse.json({ success: true, automated, hasApiKey });
+    const locationsSnap = await db.collection("stores").doc(slug).collection("locations").orderBy("createdAt", "asc").get();
+    const locations = locationsSnap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        name: data.name,
+        address: data.address || null,
+        active: data.active !== false,
+        firstName: data.firstName || null,
+        lastName: data.lastName || null,
+        email: data.email || null,
+        phone: data.phone || null,
+        city: data.city || null,
+        state: data.state || null,
+        zip: data.zip || null,
+        terminalAddressId: data.terminalAddressId || null,
+      };
+    });
+
+    return NextResponse.json({ success: true, automated, hasApiKey, locations });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -29,11 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   try {
     const body = await req.json();
-    const { enabled, defaultWeightKg, savedAddresses, activeAddressId, apiKey } = body;
-
-    if (savedAddresses && savedAddresses.length > 5) {
-      return NextResponse.json({ error: "Maximum of 5 saved addresses allowed" }, { status: 400 });
-    }
+    const { enabled, defaultWeightKg, activeLocationId, apiKey } = body;
 
     const keyRef = db.collection("storeKeys").doc(slug);
     const keySnap = await keyRef.get();
@@ -54,52 +69,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     let webhookId = existingAutomated.webhookId || null;
 
-    // savedAddresses: client owns the array (up to 5, each with a label like
-    // "Headquarters" or "Branch 2"). Only the active one needs a Terminal
-    // Africa address_id — created lazily on first save, reused afterward so
-    // we don't create duplicate addresses on Terminal's side every save.
-    const addresses = Array.isArray(savedAddresses) ? savedAddresses : (existingAutomated.savedAddresses || []);
-    const existingById: Record<string, any> = {};
-    for (const a of (existingAutomated.savedAddresses || [])) existingById[a.id] = a;
-
-    let resolvedActiveId = activeAddressId || existingAutomated.activeAddressId || (addresses[0]?.id ?? null);
-    let pickupAddress: any = null;
+    const resolvedActiveLocationId: string | null = activeLocationId || existingAutomated.activeLocationId || null;
     let pickupAddressId: string | null = existingAutomated.pickupAddressId || null;
     let terminalAddressWarning: string | null = null;
 
-    for (const addr of addresses) {
-      const prior = existingById[addr.id];
-      if (addr.id === resolvedActiveId) {
-        let terminalAddressId = prior?.terminalAddressId || addr.terminalAddressId || null;
-        if (!terminalAddressId) {
-          // Creating the Terminal Africa address is best-effort: if it fails
-          // (e.g. KYC not yet approved), we still save the address book to
-          // Firestore so the merchant doesn't lose their input. Live rates
-          // simply won't work until this succeeds on a later save.
-          try {
-            const created = await createTerminalAddress(terminalApiKey, {
-              first_name: addr.firstName,
-              last_name: addr.lastName,
-              email: addr.email,
-              phone: addr.phone,
-              line1: addr.line1,
-              city: addr.city,
-              state: addr.state,
-              country: addr.country || 'NG',
-              zip: addr.zip || undefined,
-            });
-            terminalAddressId = created.address_id || created.id || null;
-          } catch (e: any) {
-            console.error("Terminal address creation failed:", e);
-            terminalAddressWarning = e.message || "Could not register this address with Terminal Africa yet";
-          }
-        }
-        addr.terminalAddressId = terminalAddressId;
-        pickupAddress = { ...addr };
-        pickupAddressId = terminalAddressId;
-      } else if (prior?.terminalAddressId) {
-        addr.terminalAddressId = prior.terminalAddressId;
+    if (resolvedActiveLocationId) {
+      const locationRef = storeRef.collection("locations").doc(resolvedActiveLocationId);
+      const locationSnap = await locationRef.get();
+
+      if (!locationSnap.exists) {
+        return NextResponse.json({ error: "Selected location not found" }, { status: 400 });
       }
+
+      const loc = locationSnap.data()!;
+      let terminalAddressId: string | null = loc.terminalAddressId || null;
+
+      if (!terminalAddressId) {
+        try {
+          const created = await createTerminalAddress(terminalApiKey, {
+            first_name: loc.firstName || "",
+            last_name: loc.lastName || "",
+            email: loc.email || "",
+            phone: loc.phone || "",
+            line1: loc.address || "",
+            city: loc.city || "",
+            state: loc.state || "",
+            country: "NG",
+            zip: loc.zip || undefined,
+          });
+          terminalAddressId = created.address_id || created.id || null;
+          if (terminalAddressId) {
+            await locationRef.set({ terminalAddressId }, { merge: true });
+          }
+        } catch (e: any) {
+          console.error("Terminal address creation failed:", e);
+          terminalAddressWarning = e.message || "Could not register this location with Terminal Africa yet — check its courier details are complete";
+        }
+      }
+
+      pickupAddressId = terminalAddressId;
     }
 
     if (!webhookId) {
@@ -116,9 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       enabled: !!enabled,
       provider: 'terminal',
       defaultWeightKg: defaultWeightKg ? Number(defaultWeightKg) : (existingAutomated.defaultWeightKg ?? 1),
-      savedAddresses: addresses,
-      activeAddressId: resolvedActiveId,
-      pickupAddress: pickupAddress || existingAutomated.pickupAddress || null,
+      activeLocationId: resolvedActiveLocationId,
       pickupAddressId,
       webhookId,
     };
