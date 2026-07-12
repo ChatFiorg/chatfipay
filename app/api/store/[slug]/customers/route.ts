@@ -30,6 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         totalSpent: data.totalSpent || 0,
         orderCount: data.orderCount || 0,
         tags: data.tags || [],
+        notes: data.notes || '',
         firstOrderAt: data.firstOrderAt?.toDate?.()?.toISOString() || null,
         lastOrderAt: data.lastOrderAt?.toDate?.()?.toISOString() || null,
       };
