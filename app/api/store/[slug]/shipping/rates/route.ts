@@ -54,6 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         email: deliveryAddress.email || 'buyer@chatfi.pro',
         phone: deliveryAddress.phone,
         line1: deliveryAddress.line1,
+        line2: deliveryAddress.line2 || undefined,
         city: deliveryAddress.city,
         state: deliveryAddress.state,
         country: deliveryAddress.country || 'NG',
