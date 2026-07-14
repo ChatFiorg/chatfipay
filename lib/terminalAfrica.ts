@@ -22,6 +22,7 @@ export type TerminalAddress = {
   email: string;
   phone: string;
   line1: string;
+  line2?: string;
   city: string;
   state: string;
   country: string;

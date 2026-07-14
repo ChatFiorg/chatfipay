@@ -17,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     const automated = storeSnap.data()!.shipping?.automated;
 
-    if (!automated?.enabled || !automated?.pickupAddress) {
+    if (!automated?.enabled || !automated?.activeLocationId) {
       return NextResponse.json({ success: true, rates: [], fallback: true });
     }
 
@@ -27,20 +27,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ success: true, rates: [], fallback: true });
     }
 
-    const pa = automated.pickupAddress;
+    const locationSnap = await db.collection("stores").doc(slug).collection("locations").doc(automated.activeLocationId).get();
+    if (!locationSnap.exists) {
+      return NextResponse.json({ success: true, rates: [], fallback: true });
+    }
+    const loc = locationSnap.data()!;
+
     const weightKg = cartWeightKg ? Number(cartWeightKg) : (automated.defaultWeightKg || 1);
 
     const quotes = await getTerminalQuotes(terminalApiKey, {
       pickupAddress: {
-        first_name: pa.firstName,
-        last_name: pa.lastName,
-        email: pa.email,
-        phone: pa.phone,
-        line1: pa.line1,
-        city: pa.city,
-        state: pa.state,
-        country: pa.country || 'NG',
-        zip: pa.zip || undefined,
+        first_name: loc.firstName || "",
+        last_name: loc.lastName || "",
+        email: loc.email || "",
+        phone: loc.phone || "",
+        line1: loc.address || "",
+        line2: loc.line2 || undefined,
+        city: loc.city || "",
+        state: loc.state || "",
+        country: "NG",
+        zip: loc.zip || undefined,
       },
       deliveryAddress: {
         first_name: deliveryAddress.firstName,

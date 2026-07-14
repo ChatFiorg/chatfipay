@@ -17,6 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         id: d.id,
         name: data.name,
         address: data.address || null,
+        line2: data.line2 || null,
         active: data.active !== false,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         firstName: data.firstName || null,
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const doc: any = {
       name,
       address: body.address ? String(body.address).trim() : null,
+      line2: body.line2 ? String(body.line2).trim() : null,
       active: true,
       createdAt: now,
       firstName: body.firstName ? String(body.firstName).trim() : null,

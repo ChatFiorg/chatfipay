@@ -17,6 +17,7 @@ export async function PATCH(
     const update: any = {};
     if (body.name !== undefined) update.name = String(body.name).trim();
     if (body.address !== undefined) update.address = body.address ? String(body.address).trim() : null;
+    if (body.line2 !== undefined) update.line2 = body.line2 ? String(body.line2).trim() : null;
     if (body.active !== undefined) update.active = !!body.active;
     if (body.firstName !== undefined) update.firstName = body.firstName ? String(body.firstName).trim() : null;
     if (body.lastName !== undefined) update.lastName = body.lastName ? String(body.lastName).trim() : null;

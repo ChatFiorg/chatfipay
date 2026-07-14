@@ -92,6 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
             email: loc.email || "",
             phone: loc.phone || "",
             line1: loc.address || "",
+            line2: loc.line2 || undefined,
             city: loc.city || "",
             state: loc.state || "",
             country: "NG",
