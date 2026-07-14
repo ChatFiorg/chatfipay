@@ -74,6 +74,19 @@ export async function arrangeTerminalPickup(apiKey: string, rateId: string) {
   return terminalRequest(apiKey, '/shipments/pickup', 'POST', { rate_id: rateId });
 }
 
+export type TerminalState = { name: string; isoCode: string };
+export type TerminalCity = { name: string };
+
+export async function getTerminalStates(apiKey: string): Promise<TerminalState[]> {
+  const data = await terminalRequest(apiKey, '/states?country_code=NG', 'GET');
+  return (data || []).map((s: any) => ({ name: s.name, isoCode: s.isoCode }));
+}
+
+export async function getTerminalCities(apiKey: string, stateCode: string): Promise<TerminalCity[]> {
+  const data = await terminalRequest(apiKey, `/cities?country_code=NG&state_code=${stateCode}`, 'GET');
+  return (data || []).map((c: any) => ({ name: c.name }));
+}
+
 export function verifyTerminalWebhookSignature(signature: string | null, secretKey: string, rawBody: string): boolean {
   if (!signature) return false;
   const crypto = require('crypto');
