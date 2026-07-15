@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { Timestamp } from "firebase-admin/firestore";
 import { getTerminalQuotes } from "@/lib/terminalAfrica";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -74,6 +75,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       deliveryTime: r.delivery_time,
       pickupTime: r.pickup_time,
     }));
+
+    // Cache each quoted rate's real amount server-side, keyed by rateId, so
+    // the charge routes can look up the authoritative price at checkout
+    // time instead of trusting a client-supplied amount (which a buyer
+    // could tamper with to pay less than the real courier cost).
+    const now = Timestamp.now();
+    await Promise.all(
+      rates
+        .filter(r => r.rateId)
+        .map(r =>
+          db.collection("stores").doc(slug).collection("rateQuotes").doc(r.rateId).set({
+            amount: r.amount,
+            carrierName: r.carrierName,
+            createdAt: now,
+          }).catch(e => console.error("Failed to cache rate quote:", e))
+        )
+    );
 
     return NextResponse.json({ success: true, rates, fallback: false });
   } catch (e: any) {

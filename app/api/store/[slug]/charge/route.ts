@@ -163,6 +163,14 @@ export async function POST(
       shippingFee = freeThreshold != null && subtotalAfterLoyalty >= freeThreshold ? 0 : (shippingConfig.flatFee || 0);
     }
 
+    if (deliveryMethod === "delivery" && body.shippingRateId) {
+      const rateSnap = await db.collection("stores").doc(slug).collection("rateQuotes").doc(body.shippingRateId).get();
+      if (!rateSnap.exists) {
+        return NextResponse.json({ error: "Selected shipping option has expired — please reselect a delivery option" }, { status: 400 });
+      }
+      shippingFee = rateSnap.data()!.amount;
+    }
+
     const totalBeforeGiftCard = subtotalAfterLoyalty + shippingFee;
     const giftCardResult = await applyGiftCard(slug, giftCardCode, totalBeforeGiftCard);
     if ("error" in giftCardResult) {

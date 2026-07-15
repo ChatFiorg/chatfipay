@@ -150,6 +150,18 @@ export async function POST(
       shippingFee = freeThreshold != null && subtotalAfterLoyalty >= freeThreshold ? 0 : (shippingConfig.flatFee || 0);
     }
 
+    // If the buyer selected a live automated-shipping rate, the actual
+    // charge must use the real quoted amount cached server-side when the
+    // rate was generated — never a client-supplied figure, which could be
+    // tampered with to pay less than the real courier cost.
+    if (deliveryMethod === "delivery" && shippingRateId) {
+      const rateSnap = await db.collection("stores").doc(slug).collection("rateQuotes").doc(shippingRateId).get();
+      if (!rateSnap.exists) {
+        return NextResponse.json({ error: "Selected shipping option has expired — please reselect a delivery option" }, { status: 400 });
+      }
+      shippingFee = rateSnap.data()!.amount;
+    }
+
     const totalBeforeGiftCard = subtotalAfterLoyalty + shippingFee;
     const giftCardResult = await applyGiftCard(slug, giftCardCode, totalBeforeGiftCard);
     if ("error" in giftCardResult) {
