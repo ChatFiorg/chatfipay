@@ -8,9 +8,11 @@ let cached: { rate: number; updatedAt: number } | null = null;
 const TTL_MS = 5 * 60 * 1000; // 5 min
 
 async function getUsdPerUsdc(): Promise<number> {
-  const res = await fetch(`https://api.jup.ag/price/v2?ids=${USDC_MINT}`);
+  // Jupiter Price API V3 — the old price/v2 and lite-api.jup.ag endpoints
+  // were deprecated/shut down. Response shape: { [mint]: { usdPrice, ... } }
+  const res = await fetch(`https://api.jup.ag/price/v3?ids=${USDC_MINT}`);
   const data = await res.json();
-  const price = parseFloat(data?.data?.[USDC_MINT]?.price);
+  const price = data?.[USDC_MINT]?.usdPrice;
   if (!price || price <= 0) throw new Error("bad USDC price");
   return price;
 }
