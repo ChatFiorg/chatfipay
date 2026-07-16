@@ -38,8 +38,9 @@ async function getUsdcNgnRate(): Promise<number> {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { slug: string } }
+  context: { params: Promise<{ slug: string }> }
 ) {
+  await context.params;
   try {
     const rate = await getUsdcNgnRate();
     return NextResponse.json({ rate, updatedAt: Date.now() });
