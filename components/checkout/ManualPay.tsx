@@ -37,11 +37,14 @@ const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId, storeUser
     let cancelled = false;
     setPriceLoading(true);
     setPriceError(false);
-    fetch(`https://api.jup.ag/price/v2?ids=${SOL_MINT}`)
+    // Jupiter Price API V3 — the old price/v2 and lite-api.jup.ag
+    // endpoints were deprecated/shut down. Response shape:
+    // { [mint]: { usdPrice, ... } }
+    fetch(`https://api.jup.ag/price/v3?ids=${SOL_MINT}`)
       .then(res => res.json())
       .then(data => {
         if (cancelled) return;
-        const price = parseFloat(data?.data?.[SOL_MINT]?.price);
+        const price = parseFloat(data?.[SOL_MINT]?.usdPrice);
         if (price && price > 0) {
           setSolPrice(price);
         } else {
