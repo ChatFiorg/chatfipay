@@ -42,7 +42,7 @@ export async function POST(
         email,
         tags,
         newsletterSubscribedAt: now,
-        ...(custSnap.exists ? {} : { firstOrderAt: null, orderCount: 0, totalSpent: 0 }),
+        ...(custSnap.exists ? {} : { firstOrderAt: null, lastOrderAt: null, orderCount: 0, totalSpent: 0 }),
       },
       { merge: true }
     );
