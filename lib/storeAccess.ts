@@ -14,7 +14,10 @@ import { verifyOwnerToken } from "@/lib/ownerAuth";
 // never match a prefixed "wallet:<address>" token ID. This mirrors the same
 // lookup resolveStaffOrOwner already uses for products/orders.
 export async function verifyStoreAccess(req: NextRequest, slug: string): Promise<boolean> {
-  const apiKey = req.headers.get("x-api-key");
+  // Accept the API key via header (used by fetch()-based calls) or a "key"
+  // query param (used when a URL is opened directly, e.g. mobile's in-app
+  // browser navigating straight to a download link, which can't set headers).
+  const apiKey = req.headers.get("x-api-key") || new URL(req.url).searchParams.get("key");
   if (apiKey) {
     const keySnap = await db.collection("storeKeys").doc(slug).get();
     if (keySnap.exists && keySnap.data()!.apiKey === apiKey) return true;
