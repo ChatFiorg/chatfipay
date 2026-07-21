@@ -12,15 +12,58 @@ function daysSince(date: any): number | null {
   return Math.floor((Date.now() - jsDate.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function buildHtml(storeName: string, bodyText: string, unsubscribeUrl: string): string {
-  const paragraphs = bodyText
+type MentionProduct = { id: string; name: string; price: number; image?: string };
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderBodyWithProductCards(
+  bodyText: string,
+  products: MentionProduct[],
+  slug: string
+): string {
+  if (products.length === 0) {
+    return bodyText
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => `<p style="margin:0 0 14px;color:#333;line-height:1.5">${line}</p>`)
+      .join("");
+  }
+
+  const sorted = [...products].sort((a, b) => b.name.length - a.name.length);
+
+  return bodyText
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => `<p style="margin:0 0 14px;color:#333;line-height:1.5">${line}</p>`)
+    .map((line) => {
+      let html = line;
+      for (const p of sorted) {
+        const pattern = new RegExp(`#${escapeRegExp(p.name)}`, "gi");
+        if (!pattern.test(html)) continue;
+        const productUrl = `https://${slug}.chatfi.pro/product/${p.id}`;
+        const priceStr = `₦${Number(p.price).toLocaleString()}`;
+        const card = `
+          <a href="${productUrl}" style="display:block;text-decoration:none;border:1px solid #eee;border-radius:8px;overflow:hidden;margin:12px 0;max-width:320px">
+            ${p.image ? `<img src="${p.image}" alt="${p.name}" style="width:100%;height:160px;object-fit:cover;display:block" />` : ""}
+            <div style="padding:12px">
+              <p style="margin:0 0 4px;color:#111;font-weight:bold;font-size:14px">${p.name}</p>
+              <p style="margin:0;color:#666;font-size:13px">${priceStr}</p>
+            </div>
+          </a>`;
+        html = html.replace(pattern, card);
+      }
+      if (html === line) {
+        return `<p style="margin:0 0 14px;color:#333;line-height:1.5">${line}</p>`;
+      }
+      return html;
+    })
     .join("");
+}
 
+function buildHtml(storeName: string, renderedBody: string, unsubscribeUrl: string): string {
   return `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-    ${paragraphs}
+    ${renderedBody}
     <p style="color:#999;font-size:11px;margin-top:32px;border-top:1px solid #eee;padding-top:16px">
       You're receiving this because you're a customer of ${storeName}.
       <a href="${unsubscribeUrl}" style="color:#999">Unsubscribe</a>
@@ -47,6 +90,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     if (segment === "tag" && !tag) return NextResponse.json({ error: "Select a tag for this segment" }, { status: 400 });
 
     const storeSnap = await db.collection("stores").doc(slug).get();
+
+    const productsSnap = await db.collection("stores").doc(slug).collection("products").get();
+    const mentionProducts: MentionProduct[] = productsSnap.docs.map((d) => {
+      const data = d.data();
+      return { id: d.id, name: String(data.name || ""), price: Number(data.price || 0), image: data.image || undefined };
+    });
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const store = storeSnap.data()!;
     const storeName = store.name || slug;
@@ -89,7 +138,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return {
         to: email,
         subject,
-        html: buildHtml(storeName, bodyText, unsubscribeUrl),
+        html: buildHtml(storeName, renderBodyWithProductCards(bodyText, mentionProducts, slug), unsubscribeUrl),
         replyTo,
       };
     });
