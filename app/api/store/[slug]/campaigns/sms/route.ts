@@ -6,6 +6,32 @@ import { sendBulkSms } from "@/lib/termii";
 
 const AT_RISK_DAYS = 60;
 
+type MentionProduct = { id: string; name: string; price: number };
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Replaces "#Product Name" with plain-text "Product Name (₦price): <link>" —
+// no images/markup since this goes out as an SMS.
+function renderMessageWithProductLinks(
+  message: string,
+  products: MentionProduct[],
+  slug: string
+): string {
+  if (products.length === 0) return message;
+  const sorted = [...products].sort((a, b) => b.name.length - a.name.length);
+  let result = message;
+  for (const p of sorted) {
+    const pattern = new RegExp(`#${escapeRegExp(p.name)}`, "gi");
+    if (!pattern.test(result)) continue;
+    const productUrl = `https://${slug}.chatfi.pro/product/${p.id}`;
+    const priceStr = `₦${Number(p.price).toLocaleString()}`;
+    result = result.replace(pattern, `${p.name} (${priceStr}): ${productUrl}`);
+  }
+  return result;
+}
+
 function daysSince(date: any): number | null {
   const jsDate = date?.toDate?.();
   if (!jsDate) return null;
@@ -22,6 +48,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   try {
     const body = await req.json();
     const message = String(body.message || "").trim();
+
+    const productsSnap = await db.collection("stores").doc(slug).collection("products").get();
+    const mentionProducts: MentionProduct[] = productsSnap.docs.map((d) => {
+      const data = d.data();
+      return { id: d.id, name: String(data.name || ""), price: Number(data.price || 0) };
+    });
+    const renderedMessage = renderMessageWithProductLinks(message, mentionProducts, slug);
     const segment: string = body.segment || "all";
     const tag: string | null = body.tag ? String(body.tag).trim() : null;
 
@@ -61,10 +94,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const campaignRef = db.collection("stores").doc(slug).collection("campaigns").doc();
 
     try {
-      const result = await sendBulkSms(apiKey, senderId, recipients, message);
+      const result = await sendBulkSms(apiKey, senderId, recipients, renderedMessage);
       await campaignRef.set({
         type: "sms",
-        message,
+        message: renderedMessage,
         segment,
         tag,
         recipientCount: recipients.length,
@@ -76,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     } catch (e: any) {
       await campaignRef.set({
         type: "sms",
-        message,
+        message: renderedMessage,
         segment,
         tag,
         recipientCount: recipients.length,
