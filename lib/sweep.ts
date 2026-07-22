@@ -13,6 +13,7 @@ import {
 } from "@solana/spl-token";
 import bs58 from "bs58";
 import { derivePaymentKeypair } from "./derivedWallet";
+import { fundDepositAddress } from "./fundDeposit";
 
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 // Rent-exemption cost for a new SPL token account (paid by depositKeypair
@@ -50,6 +51,7 @@ export async function sweepPayment(
   }
 
   const tx = new Transaction();
+  let rentNeeded = 0;
 
   const toAccount = await getAccount(connection, toAta).catch(() => null);
   const needsAtaCreation = !toAccount;
@@ -62,6 +64,7 @@ export async function sweepPayment(
         USDC_MINT
       )
     );
+    rentNeeded += ATA_RENT_LAMPORTS;
   }
 
   // Split the swept balance: merchant gets the sale amount, treasury
@@ -88,6 +91,7 @@ export async function sweepPayment(
           USDC_MINT
         )
       );
+      rentNeeded += ATA_RENT_LAMPORTS;
     }
     feeAmount = FEE_USDC_LAMPORTS;
     merchantAmount = fromAccount.amount - FEE_USDC_LAMPORTS;
@@ -111,6 +115,20 @@ export async function sweepPayment(
         feeAmount
       )
     );
+  }
+
+  // Fund the deposit address now that we know a real payment landed
+  // (fromAccount.amount > 0, checked above), instead of pre-funding
+  // every generated payment link at creation time.
+  const estimatedFee = 5000; // lamports, conservative pre-compile estimate
+  const requiredLamports = rentNeeded + estimatedFee + 50_000; // margin
+  const depositBalance = await connection.getBalance(depositKeypair.publicKey);
+  if (depositBalance < requiredLamports) {
+    try {
+      await fundDepositAddress(depositAddress);
+    } catch (e) {
+      console.error("Failed to fund deposit address before sweep:", e);
+    }
   }
 
   if (treasuryKey) {

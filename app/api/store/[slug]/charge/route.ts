@@ -10,7 +10,6 @@ import { resolveOrderPricing } from "@/lib/orderPricing";
 import { resolveLoyaltyRedemption } from "@/lib/loyalty";
 import { applyGiftCard } from "@/lib/giftCards";
 import { derivePaymentAddress } from "@/lib/derivedWallet";
-import { fundDepositAddress } from "@/lib/fundDeposit";
 import { PublicKey } from "@solana/web3.js";
 
 interface ResolvedLine {
@@ -258,11 +257,7 @@ export async function POST(
 
     const depositAddress = derivePaymentAddress(payLinkId);
 
-    try {
-      await fundDepositAddress(depositAddress);
-    } catch (e) {
-      console.error("Failed to fund deposit address (sweep will fail later):", e);
-    }
+    // deposit address is now funded lazily in sweep.ts, once a real payment lands
 
     await db.collection("pay_links").doc(payLinkId).set({
       merchantId: slug,

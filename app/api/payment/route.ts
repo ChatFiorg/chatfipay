@@ -3,7 +3,6 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { derivePaymentAddress } from "@/lib/derivedWallet";
-import { fundDepositAddress } from "@/lib/fundDeposit";
 
 const VALID_TOKENS = ["SOL", "USDC", "USDT"];
 const DEFAULT_EXPIRY_MINUTES = 60 * 24;
@@ -72,11 +71,7 @@ export async function POST(req: NextRequest) {
   );
 
   const depositAddress = derivePaymentAddress(id);
-  try {
-    await fundDepositAddress(depositAddress);
-  } catch (e) {
-    console.error("Failed to fund deposit address (sweep will fail later):", e);
-  }
+  // deposit address is now funded lazily in sweep.ts, once a real payment lands
 
   const paymentDoc = {
     merchantId: merchant.id,
