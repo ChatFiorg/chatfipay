@@ -220,6 +220,8 @@ export async function POST(
       paymentStatus: "pending",
       createdAt: now,
       paidAt: null,
+      disbursed: false,
+      disbursedAt: null,
       stockReserved: reserveInventoryEnabled,
       reservationExpiresAt: reserveInventoryEnabled ? TimestampType.fromMillis(now.toMillis() + RESERVATION_WINDOW_MS) : null,
     };

@@ -47,6 +47,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const normalizedEmail = normalizeEmail(order.buyerEmail);
     const customerKey = normalizedPhone || normalizedEmail;
 
+    // Crypto (USDC) settles instantly, so mark it disbursed the moment payment
+    // is confirmed. Naira orders stay disbursed:false (set at order creation)
+    // until the settlement-checking cron confirms Paystack has actually paid
+    // out the merchant's subaccount.
+    const isCrypto = order.paymentMethod !== "naira";
+
     await orderRef.update({
       status: "paid",
       txSignature: txSignature || null,
@@ -56,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       buyerPhoneNormalized: normalizedPhone,
       buyerEmailNormalized: normalizedEmail,
       customerKey,
+      ...(isCrypto ? { disbursed: true, disbursedAt: now } : {}),
     });
 
     await notifyOrderEvent(slug, orderId, "confirmed").catch(e => console.error("notifyOrderEvent(confirmed) failed:", e));
