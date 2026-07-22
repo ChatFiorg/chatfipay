@@ -3,6 +3,7 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import { verifyStoreAccess } from "@/lib/storeAccess";
 import { sendBatchEmails, generateUnsubscribeToken } from "@/lib/emailCampaigns";
+import { deductWallet, refundWallet, InsufficientBalanceError, EMAIL_PRICE_NGN } from "@/lib/wallet";
 
 const AT_RISK_DAYS = 60;
 
@@ -127,6 +128,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "No customers match this segment" }, { status: 400 });
     }
 
+    const totalCost = uniqueRecipients.length * EMAIL_PRICE_NGN;
+    try {
+      await deductWallet(slug, totalCost);
+    } catch (e) {
+      if (e instanceof InsufficientBalanceError) {
+        return NextResponse.json(
+          { error: `Insufficient wallet balance. This send costs ₦${totalCost} (${uniqueRecipients.length} × ₦${EMAIL_PRICE_NGN}) — top up your wallet to continue.` },
+          { status: 402 }
+        );
+      }
+      throw e;
+    }
+
     const fromAddress = (process.env.RESEND_FROM_EMAIL || "ChatFi <onboarding@resend.dev>").replace(
       /^[^<]*/,
       `${storeName} (via ChatFi) `
@@ -160,6 +174,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       });
       return NextResponse.json({ success: true, recipientCount: uniqueRecipients.length });
     } catch (e: any) {
+      await refundWallet(slug, totalCost).catch((refundErr) => console.error("Failed to refund wallet after send failure:", refundErr));
       await campaignRef.set({
         type: "email",
         subject,
