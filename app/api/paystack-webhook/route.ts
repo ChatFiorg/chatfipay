@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
@@ -23,6 +24,41 @@ export async function POST(req: NextRequest) {
 
     if (event.event !== "charge.success") {
       return NextResponse.json({ success: true, ignored: event.event });
+    }
+
+    // Wallet top-ups (SMS/email credit purchases) are a different flow from
+    // order payments — no order to look up, just credit the store's balance
+    // once the amount is confirmed to match what was requested.
+    if (event.data?.metadata?.type === "wallet_topup") {
+      const { slug: topupSlug, topupId } = event.data.metadata;
+      if (!topupSlug || !topupId) {
+        return NextResponse.json({ error: "Missing wallet_topup metadata" }, { status: 400 });
+      }
+
+      const topupRef = db.collection("stores").doc(topupSlug).collection("walletTopups").doc(topupId);
+      const topupSnap = await topupRef.get();
+      if (!topupSnap.exists) {
+        console.error(`No wallet topup found for ${topupSlug}/${topupId}`);
+        return NextResponse.json({ error: "Topup not found" }, { status: 404 });
+      }
+      const topup = topupSnap.data()!;
+
+      if (topup.status === "completed") {
+        return NextResponse.json({ success: true, topupId, alreadyProcessed: true });
+      }
+
+      const expectedKobo = Math.round((topup.amount || 0) * 100);
+      if (event.data.amount !== expectedKobo) {
+        console.error(`Amount mismatch for wallet topup ${topupId}: expected ${expectedKobo}, got ${event.data.amount}`);
+        return NextResponse.json({ error: "Amount mismatch" }, { status: 400 });
+      }
+
+      await db.collection("stores").doc(topupSlug).update({
+        walletBalance: FieldValue.increment(topup.amount),
+      });
+      await topupRef.set({ status: "completed", completedAt: Timestamp.now() }, { merge: true });
+
+      return NextResponse.json({ success: true, topupId, credited: topup.amount });
     }
 
     const reference = event.data?.reference;
