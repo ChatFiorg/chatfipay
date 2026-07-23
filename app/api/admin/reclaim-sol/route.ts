@@ -54,7 +54,26 @@ export async function POST(req: NextRequest) {
         const balance = await connection.getBalance(depositKeypair.publicKey);
         if (balance <= RESERVE_LAMPORTS) continue;
 
-        const reclaimable = balance - RESERVE_LAMPORTS;
+        // Solana requires an account to be either exactly 0 or above the
+        // rent-exemption minimum — leaving a small nonzero "reserve" behind
+        // is invalid and the transfer will fail simulation. So we compute the
+        // real network fee for this exact transaction and drain to exactly 0.
+        const probeTx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: depositKeypair.publicKey,
+            toPubkey: treasury.publicKey,
+            lamports: 1,
+          })
+        );
+        const { blockhash } = await connection.getLatestBlockhash();
+        probeTx.recentBlockhash = blockhash;
+        probeTx.feePayer = depositKeypair.publicKey;
+        const feeCalc = await connection.getFeeForMessage(probeTx.compileMessage(), "confirmed");
+        const fee = feeCalc?.value || 5000;
+
+        const reclaimable = balance - fee;
+        if (reclaimable <= 0) continue;
+
         const tx = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: depositKeypair.publicKey,
@@ -62,7 +81,6 @@ export async function POST(req: NextRequest) {
             lamports: reclaimable,
           })
         );
-        const { blockhash } = await connection.getLatestBlockhash();
         tx.recentBlockhash = blockhash;
         tx.feePayer = depositKeypair.publicKey;
 
