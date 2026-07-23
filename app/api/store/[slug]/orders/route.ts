@@ -23,6 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         ...data,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         paidAt: data.paidAt?.toDate?.()?.toISOString() || null,
+        disbursedAt: data.disbursedAt?.toDate?.()?.toISOString() || null,
       };
     });
 
