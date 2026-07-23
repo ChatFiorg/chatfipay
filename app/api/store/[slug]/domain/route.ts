@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { verifyStoreAccess } from "@/lib/storeAccess";
+import { deductWallet, getWalletBalance, InsufficientBalanceError, DOMAIN_MONTHLY_PRICE_NGN } from "@/lib/wallet";
+
+const ALLOWED_MONTHS = [1, 3, 6, 12];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const VERCEL_PROJECT_ID = "prj_AMh5p9qlQxZHQKHiJNejQa0PBFvr"; // chatfistore
 const VERCEL_TEAM_ID = "team_U19GHjZvbaTVoiTHr7SKpL2n";
@@ -38,8 +42,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const { slug } = await params;
   try {
     const body = await req.json();
-    const { domain, ownerWallet } = body;
+    const { domain, ownerWallet, months } = body;
     if (!domain) return NextResponse.json({ error: "Missing domain" }, { status: 400 });
+
+    const duration = Number(months);
+    if (!ALLOWED_MONTHS.includes(duration)) {
+      return NextResponse.json({ error: `months must be one of ${ALLOWED_MONTHS.join(", ")}` }, { status: 400 });
+    }
+    const cost = DOMAIN_MONTHLY_PRICE_NGN * duration;
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(cleanDomain)) {
@@ -55,6 +65,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "This domain is already connected to another store" }, { status: 409 });
     }
 
+    try {
+      await deductWallet(slug, cost);
+    } catch (e) {
+      if (e instanceof InsufficientBalanceError) {
+        return NextResponse.json({ error: e.message, required: e.required, available: e.available }, { status: 402 });
+      }
+      throw e;
+    }
+
     const vercelRes = await fetch(
       `${VERCEL_API}/v10/projects/${VERCEL_PROJECT_ID}/domains?teamId=${VERCEL_TEAM_ID}`,
       { method: "POST", headers: vercelHeaders(), body: JSON.stringify({ name: cleanDomain }) }
@@ -65,10 +84,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: vercelData?.error?.message || "Failed to add domain on Vercel" }, { status: vercelRes.status });
     }
 
+    const expiresAt = new Date(Date.now() + duration * 30 * DAY_MS).toISOString();
+
     await db.collection("stores").doc(slug).set({
       customDomain: cleanDomain,
       customDomainVerified: !!vercelData.verified,
       customDomainAddedAt: new Date().toISOString(),
+      customDomainExpiresAt: expiresAt,
     }, { merge: true });
 
     await db.collection("domainMappings").doc(cleanDomain).set({ username: slug, addedAt: new Date().toISOString() });
@@ -79,6 +101,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       verified: !!vercelData.verified,
       verification: vercelData.verification || [],
       dns: dnsInstructionsFor(cleanDomain),
+      expiresAt,
+      amountCharged: cost,
     });
   } catch (e) {
     console.error(e);
@@ -114,6 +138,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       misconfigured: !!configData.misconfigured,
       verification: statusData.verification || [],
       dns: dnsInstructionsFor(domain),
+      expiresAt: data.customDomainExpiresAt || null,
+      monthlyPrice: DOMAIN_MONTHLY_PRICE_NGN,
     });
   } catch (e) {
     console.error(e);
