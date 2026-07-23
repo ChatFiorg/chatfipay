@@ -3,6 +3,7 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import { verifyStoreAccess } from "@/lib/storeAccess";
 import { sendBulkSms } from "@/lib/termii";
+import { deductWallet, refundWallet, InsufficientBalanceError, SMS_UNIT_PRICE_NGN } from "@/lib/wallet";
 
 const AT_RISK_DAYS = 60;
 
@@ -61,13 +62,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     if (!message) return NextResponse.json({ error: "Message is required" }, { status: 400 });
     if (segment === "tag" && !tag) return NextResponse.json({ error: "Select a tag for this segment" }, { status: 400 });
 
-    const keySnap = await db.collection("storeKeys").doc(slug).get();
-    const apiKey = keySnap.exists ? keySnap.data()!.termiiApiKey : null;
-    if (!apiKey) return NextResponse.json({ error: "No Termii API key on file yet — add one in SMS settings" }, { status: 400 });
+    const useChatfiCredits = !!body.useChatfiCredits;
 
-    const storeSnap = await db.collection("stores").doc(slug).get();
-    const senderId = storeSnap.exists ? storeSnap.data()!.sms?.senderId : null;
-    if (!senderId) return NextResponse.json({ error: "No Sender ID on file yet — add one in SMS settings" }, { status: 400 });
+    let apiKey: string | null;
+    let senderId: string | null;
+
+    if (useChatfiCredits) {
+      apiKey = process.env.CHATFI_TERMII_API_KEY || null;
+      senderId = process.env.CHATFI_TERMII_SENDER_ID || null;
+      if (!apiKey || !senderId) {
+        console.error("Missing CHATFI_TERMII_API_KEY or CHATFI_TERMII_SENDER_ID env var");
+        return NextResponse.json({ error: "ChatFi-hosted SMS is not configured yet" }, { status: 500 });
+      }
+    } else {
+      const keySnap = await db.collection("storeKeys").doc(slug).get();
+      apiKey = keySnap.exists ? keySnap.data()!.termiiApiKey : null;
+      if (!apiKey) return NextResponse.json({ error: "No Termii API key on file yet — add one in SMS settings, or use ChatFi credits instead" }, { status: 400 });
+
+      const storeSnap = await db.collection("stores").doc(slug).get();
+      senderId = storeSnap.exists ? storeSnap.data()!.sms?.senderId : null;
+      if (!senderId) return NextResponse.json({ error: "No Sender ID on file yet — add one in SMS settings" }, { status: 400 });
+    }
 
     const custSnap = await db.collection("stores").doc(slug).collection("customers").get();
 
@@ -90,6 +105,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "No customers match this segment" }, { status: 400 });
     }
 
+    const totalCost = recipients.length * SMS_UNIT_PRICE_NGN;
+    if (useChatfiCredits) {
+      try {
+        await deductWallet(slug, totalCost);
+      } catch (e) {
+        if (e instanceof InsufficientBalanceError) {
+          return NextResponse.json(
+            { error: `Insufficient wallet balance. This send costs ₦${totalCost} (${recipients.length} × ₦${SMS_UNIT_PRICE_NGN}) — top up your wallet to continue.` },
+            { status: 402 }
+          );
+        }
+        throw e;
+      }
+    }
+
     const now = Timestamp.now();
     const campaignRef = db.collection("stores").doc(slug).collection("campaigns").doc();
 
@@ -107,6 +137,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       });
       return NextResponse.json({ success: true, recipientCount: recipients.length, termiiMessageId: result.message_id });
     } catch (e: any) {
+      if (useChatfiCredits) {
+        await refundWallet(slug, totalCost).catch((refundErr) => console.error("Failed to refund wallet after send failure:", refundErr));
+      }
       await campaignRef.set({
         type: "sms",
         message: renderedMessage,
