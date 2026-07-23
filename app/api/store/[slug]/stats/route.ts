@@ -61,6 +61,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     const pendingSettlement = pendingOrders.reduce((s, o) => s + (o.amount || 0), 0);
     const refundedAmount = refundedOrders.reduce((s, o) => s + (o.amount || 0), 0);
 
+    // Platform fee only applies to USDC orders (ChatFi's own take-rate on
+    // the crypto rail); Naira orders' processing fee goes entirely to
+    // Paystack, not ChatFi, so they contribute $0 here.
+    const totalFeesNgn = paidOrders.reduce((s, o) => {
+      if (o.paymentMethod !== "usdc" || !o.amountUsdc || !o.ngnPerUsdc) return s;
+      const feeUsdc = 0.2 + 0.01 * o.amountUsdc;
+      return s + feeUsdc * o.ngnPerUsdc;
+    }, 0);
+
     const paymentMethods: Record<string, { count: number; revenue: number }> = {};
     for (const o of paidOrders) {
       const method = o.paymentMethod || "unknown";
@@ -124,6 +133,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       range: { from: fromKey, to: toKey },
       summary: {
         totalRevenue: rangeRevenue,
+        totalFees: Math.round(totalFeesNgn),
+        netRevenue: Math.round(rangeRevenue - totalFeesNgn),
         totalOrders: rangeOrders,
         totalCustomers, repeatCustomers,
         thisWeekRevenue, lastWeekRevenue,
