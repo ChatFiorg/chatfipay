@@ -23,6 +23,10 @@ const ATA_RENT_LAMPORTS = 2_039_280;
 // the buyer at checkout and redirected to treasury here instead of being
 // sent to the merchant. Keep in sync with FEE_USDC in charge/route.ts.
 const FEE_USDC_LAMPORTS = BigInt(200_000); // 0.2 USDC
+// Platform take-rate on top of the flat fee — 1% of the swept balance,
+// mirroring how Paystack deducts its cut from the merchant's proceeds
+// rather than adding a surcharge on top of what the buyer pays.
+const PERCENTAGE_FEE_BPS = BigInt(100); // 100 basis points = 1%
 
 export async function sweepPayment(
   paymentId: string,
@@ -78,7 +82,10 @@ export async function sweepPayment(
   let merchantAmount = fromAccount.amount;
   let treasuryAta: PublicKey | null = null;
 
-  if (treasuryKeyForFee && fromAccount.amount > FEE_USDC_LAMPORTS) {
+  const percentageFee = (fromAccount.amount * PERCENTAGE_FEE_BPS) / BigInt(10_000);
+  const combinedFee = FEE_USDC_LAMPORTS + percentageFee;
+
+  if (treasuryKeyForFee && fromAccount.amount > combinedFee) {
     const treasuryPubkeyForFee = Keypair.fromSecretKey(bs58.decode(treasuryKeyForFee)).publicKey;
     treasuryAta = await getAssociatedTokenAddress(USDC_MINT, treasuryPubkeyForFee);
     const treasuryAccount = await getAccount(connection, treasuryAta).catch(() => null);
@@ -93,8 +100,8 @@ export async function sweepPayment(
       );
       rentNeeded += ATA_RENT_LAMPORTS;
     }
-    feeAmount = FEE_USDC_LAMPORTS;
-    merchantAmount = fromAccount.amount - FEE_USDC_LAMPORTS;
+    feeAmount = combinedFee;
+    merchantAmount = fromAccount.amount - combinedFee;
   }
 
   tx.add(
