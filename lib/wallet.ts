@@ -8,7 +8,7 @@ export const EMAIL_PRICE_NGN = 3;
 // Custom domain connection/change fee, billed per month, purchasable in
 // 1/3/6/12-month blocks. Merchants are only ever charged when they connect
 // or change a domain, not on an ongoing basis while it's already active.
-export const DOMAIN_MONTHLY_PRICE_NGN = 1000;
+export const DOMAIN_MONTHLY_PRICE_NGN = 250; // ₦3,000/year at the 12-month duration
 
 export class InsufficientBalanceError extends Error {
   constructor(public required: number, public available: number) {
