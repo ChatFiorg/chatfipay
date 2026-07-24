@@ -118,7 +118,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     if (!snap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const data = snap.data()!;
     const domain = data.customDomain;
-    if (!domain) return NextResponse.json({ domain: null });
+    if (!domain) return NextResponse.json({ domain: null, monthlyPrice: DOMAIN_MONTHLY_PRICE_NGN });
 
     const statusRes = await fetch(
       `${VERCEL_API}/v9/projects/${VERCEL_PROJECT_ID}/domains/${domain}?teamId=${VERCEL_TEAM_ID}`,
