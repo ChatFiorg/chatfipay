@@ -4,6 +4,7 @@
   "crons": [
     { "path": "/api/cron/abandoned-carts", "schedule": "0 9 * * *" },
     { "path": "/api/cron/performance-digests", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/check-settlements", "schedule": "0 10 * * *" }
+    { "path": "/api/cron/check-settlements", "schedule": "0 10 * * *" },
+    { "path": "/api/cron/expire-domains", "schedule": "0 6 * * *" }
   ]
 }
